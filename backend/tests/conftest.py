@@ -20,7 +20,10 @@ TEST_DB_URL = Settings().test_database_url
 PASSWORD = "correct-horse-battery-staple"
 
 # Tables wiped between integration tests (children first is not needed with CASCADE).
-_TABLES = "audit_events, user_sessions, team_memberships, users, teams, organizations"
+_TABLES = (
+    "idempotency_records, task_completion_evidence, task_status_history, task_assignments, "
+    "tasks, projects, audit_events, user_sessions, team_memberships, users, teams, organizations"
+)
 
 
 def _clear_caches() -> None:
@@ -166,3 +169,31 @@ def login(client: TestClient, username: str, password: str = PASSWORD) -> str:
     resp = client.post("/api/v1/auth/login", json={"username": username, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["csrf_token"]
+
+
+class Api:
+    """A signed-in test user: sends CSRF and Idempotency-Key headers like the real frontend."""
+
+    def __init__(self, make_client, db_url: str, username: str) -> None:
+        self.client = make_client(db_url)
+        self.csrf = login(self.client, username)
+
+    def get(self, path: str, **kw):
+        return self.client.get(f"/api/v1{path}", **kw)
+
+    def post(self, path: str, json=None, key: str | None = "auto", **kw):
+        headers = {"X-CSRF-Token": self.csrf, **kw.pop("headers", {})}
+        if key == "auto":
+            key = str(uuid.uuid4())
+        if key is not None:
+            headers["Idempotency-Key"] = key
+        return self.client.post(f"/api/v1{path}", json=json, headers=headers, **kw)
+
+    def patch(self, path: str, json=None):
+        return self.client.patch(f"/api/v1{path}", json=json, headers={"X-CSRF-Token": self.csrf})
+
+
+@pytest.fixture
+def as_user(make_client, migrated_db_url):
+    """as_user("manager_web") -> Api signed in as that user (each call = separate browser)."""
+    return lambda username: Api(make_client, migrated_db_url, username)

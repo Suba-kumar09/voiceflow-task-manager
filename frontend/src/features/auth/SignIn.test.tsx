@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { App } from '../../app/App'
-import type { Me } from '../../services/api'
+import type { Me, Task } from '../../services/api'
 
 const ORG = { id: 'org1', name: 'Demo Organization (DEMO DATA)', is_demo: true, timezone: 'Asia/Kolkata' }
 
@@ -26,7 +26,35 @@ const employee: Me = {
   teams: [{ team_id: 't1', team_name: 'Web Platform', membership_role: 'MEMBER' }],
 }
 
+const webTesting: Task = {
+  id: 'task1',
+  team_id: 't1',
+  project_id: null,
+  external_key: null,
+  title: 'Website testing',
+  description: '',
+  acceptance_criteria: 'All checkout pages pass',
+  priority: 'HIGH',
+  status: 'IN_PROGRESS',
+  assignee: { id: 'u2', display_name: 'Subashini' },
+  due_at: '2026-11-27T12:30:00Z',
+  timezone: 'Asia/Kolkata',
+  requires_approval: false,
+  evidence_policy: 'NONE',
+  version: 3,
+  created_at: '2026-11-20T10:00:00Z',
+  updated_at: '2026-11-20T10:00:00Z',
+}
+
 type Handler = (init: RequestInit | undefined) => { status: number; body?: unknown }
+
+const employeeTaskRoutes: Record<string, Handler> = {
+  'GET /api/v1/me/tasks/current': () => ({ status: 200, body: { task: webTesting } }),
+  'GET /api/v1/me/tasks?limit=200': () => ({
+    status: 200,
+    body: { items: [webTesting], total: 1, limit: 200, offset: 0 },
+  }),
+}
 
 function mockApi(routes: Record<string, Handler>) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -67,10 +95,14 @@ describe('sign-in flow', () => {
     expect(screen.getByLabelText('Password')).toHaveValue('')
   })
 
-  it('signs a manager in and shows their team roster with a demo-data banner', async () => {
+  it('signs a manager in and shows their team tasks, roster and a demo-data banner', async () => {
     mockApi({
       'GET /api/v1/users/me': () => unauthorized,
       'POST /api/v1/auth/login': () => ({ status: 200, body: manager }),
+      'GET /api/v1/tasks?limit=200&team_id=t1': () => ({
+        status: 200,
+        body: { items: [webTesting], total: 1, limit: 200, offset: 0 },
+      }),
       'GET /api/v1/teams/t1/employees?limit=200': () => ({
         status: 200,
         body: {
@@ -87,22 +119,43 @@ describe('sign-in flow', () => {
     await signIn('kavitha', 'a-good-password')
     expect(await screen.findByRole('heading', { name: 'Welcome, Kavitha' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Teams you manage' })).toBeInTheDocument()
-    expect(await screen.findByText('Subashini')).toBeInTheDocument()
+    expect(await screen.findByText('Website testing')).toBeInTheDocument()
+    expect(screen.getByText('In progress')).toBeInTheDocument()
+    expect(screen.getByText(/High priority · .*· Subashini/)).toBeInTheDocument()
     expect(screen.getByRole('note')).toHaveTextContent('Demo data')
   })
 
-  it('restores an existing session and shows the employee view without team rosters', async () => {
-    mockApi({ 'GET /api/v1/users/me': () => ({ status: 200, body: employee }) })
+  it('restores an employee session and shows their current task, not team rosters', async () => {
+    mockApi({
+      'GET /api/v1/users/me': () => ({ status: 200, body: employee }),
+      ...employeeTaskRoutes,
+    })
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'Welcome, Subashini' })).toBeInTheDocument()
     expect(screen.getByText(/You are on the Web Platform team/)).toBeInTheDocument()
+    expect(await screen.findByText('Current task')).toBeInTheDocument()
+    expect(screen.getByText('All checkout pages pass')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Teams you manage' })).not.toBeInTheDocument()
+  })
+
+  it('tells an employee plainly when they have no active task', async () => {
+    mockApi({
+      'GET /api/v1/users/me': () => ({ status: 200, body: employee }),
+      'GET /api/v1/me/tasks/current': () => ({ status: 200, body: { task: null } }),
+      'GET /api/v1/me/tasks?limit=200': () => ({
+        status: 200,
+        body: { items: [], total: 0, limit: 200, offset: 0 },
+      }),
+    })
+    render(<App />)
+    expect(await screen.findByText('You have no active task right now.')).toBeInTheDocument()
   })
 
   it('sends the CSRF token when signing out and returns to sign-in', async () => {
     let sentCsrf: string | undefined
     mockApi({
       'GET /api/v1/users/me': () => ({ status: 200, body: employee }),
+      ...employeeTaskRoutes,
       'POST /api/v1/auth/logout': (init) => {
         sentCsrf = (init?.headers as Record<string, string>)['X-CSRF-Token']
         return { status: 204 }
@@ -119,6 +172,7 @@ describe('sign-in flow', () => {
     mockApi({
       'GET /api/v1/users/me': () => ({ status: 200, body: manager }),
       'GET /api/v1/teams/t1/employees?limit=200': () => unauthorized,
+      'GET /api/v1/tasks?limit=200&team_id=t1': () => unauthorized,
     })
     render(<App />)
     await waitFor(() =>

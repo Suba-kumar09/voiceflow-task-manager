@@ -153,3 +153,47 @@ export const peopleApi = {
   teamEmployees: (teamId: string) =>
     request<Page<EmployeeSummary>>(`/api/v1/teams/${encodeURIComponent(teamId)}/employees?limit=200`),
 }
+
+// ---------------------------------------------------------------- tasks
+
+export type TaskStatus =
+  | 'DRAFT'
+  | 'UNASSIGNED'
+  | 'ASSIGNED'
+  | 'ACCEPTED'
+  | 'IN_PROGRESS'
+  | 'BLOCKED'
+  | 'PENDING_REVIEW'
+  | 'COMPLETED'
+  | 'CANCELLED'
+
+export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
+
+export interface Task {
+  id: string
+  team_id: string
+  project_id: string | null
+  external_key: string | null
+  title: string
+  description: string
+  acceptance_criteria: string
+  priority: TaskPriority
+  status: TaskStatus
+  assignee: { id: string; display_name: string } | null
+  due_at: string | null
+  timezone: string
+  requires_approval: boolean
+  evidence_policy: 'NONE' | 'NOTE' | 'LINK' | 'MANAGER_APPROVAL'
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export const tasksApi = {
+  list: (teamId?: string) =>
+    request<Page<Task>>(
+      `/api/v1/tasks?limit=200${teamId ? `&team_id=${encodeURIComponent(teamId)}` : ''}`,
+    ),
+  mine: () => request<Page<Task>>('/api/v1/me/tasks?limit=200'),
+  current: () => request<{ task: Task | null }>('/api/v1/me/tasks/current'),
+}

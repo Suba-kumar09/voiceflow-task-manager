@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.logging import request_id_var
+from app.services.errors import DomainError
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,10 @@ def register_error_handlers(app: FastAPI) -> None:
             429: "too_many_requests",
         }.get(exc.status_code, "http_error")
         return _respond(exc.status_code, code, str(exc.detail))
+
+    @app.exception_handler(DomainError)
+    async def domain_error(_: Request, exc: DomainError):
+        return _respond(exc.status_code, exc.code, exc.message)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, exc: RequestValidationError):

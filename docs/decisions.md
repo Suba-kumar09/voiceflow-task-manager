@@ -45,6 +45,20 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | A7 | Employees may see only their own profile; team rosters are visible to the team's managers and to administrators. | "Employees cannot access other employees' private data." Revisit if employees need a coworker directory. |
 | A8 | Demo data comes only from `python -m app.cli.seed_demo`; the organization is flagged `is_demo` and the UI shows a "Demo data" banner. Passwords are random and written to a local file outside git. | CLAUDE.md: label demo data clearly; never put credentials in the repo. |
 
+## 2026-11-20 — Phase 3: task core
+
+| # | Decision | Why |
+|---|---|---|
+| T1 | The transition table lives in `app/services/tasks/lifecycle.py` and is the only source of allowed status changes. It matches CLAUDE.md section 9, plus: managers may **unassign** (ASSIGNED/ACCEPTED/BLOCKED → UNASSIGNED) and **reassign** from ASSIGNED, ACCEPTED or BLOCKED. **Cancel** is allowed only from DRAFT, UNASSIGNED or ASSIGNED, as in the spec. | One testable place; anything unlisted is refused (409 `invalid_transition`). |
+| T2 | Actor rules: managers/admins create, assign, reassign, unassign, cancel, approve and reject. Only the **assignee** accepts, declines, starts, blocks and reports completion — a manager cannot claim an employee's work is done, and nobody can approve their own work. The orchestrator (SYSTEM) may only **assign**. | Accountability; matches CLAUDE.md section 3. |
+| T3 | A reason is required for reassign, unassign, decline, block, reject and cancel. | Every exception path leaves an explanation in the history. |
+| T4 | "Done" goes to `COMPLETED` only when the task needs no approval and no evidence; otherwise `PENDING_REVIEW`. NOTE and LINK evidence are checked and stored; links must be full http(s) URLs. | A spoken "done" is a claim, not proof. |
+| T5 | **No double assignment**, three layers: (1) `SELECT … FOR UPDATE` on the task, (2) lock on the employee row while checking their workload, (3) a partial unique index allowing one open assignment per task, plus a CHECK that owner and status agree. Verified by concurrent-thread tests. | Correctness must not depend on a single mechanism. |
+| T6 | **Workload limit** = tasks in ASSIGNED/ACCEPTED/IN_PROGRESS/BLOCKED, per user (`users.wip_limit`, default 1). A manager may override on manual assignment; the override is recorded in the audit event. | D4; PENDING_REVIEW work does not block new work. |
+| T7 | **Idempotency-Key is required** on create, assign and reassign, and optional on other actions. Keys are per user; reusing a key for a different request is refused (422). The stored result is written in the same transaction as the change. | Safe retries over unreliable networks and voice turns. |
+| T8 | Tasks use optimistic concurrency (`version`); edits must send the version they saw. Completed and cancelled tasks cannot be edited. | Prevents silently overwriting someone else's change. |
+| T9 | `projects` exists only minimally (name, team, status). Backlog import, dependencies, skills and the automatic matching/ranking policy are Phase 4. | Smallest useful slice. |
+
 ## 2026-11-20 — Phase 0 measurements (this laptop)
 
 Hardware: AMD Ryzen 3 7320U (4C/8T), ~8 GB RAM, integrated GPU (no CUDA), Windows 11 with

@@ -5,8 +5,8 @@ orchestrator assigns all eligible tasks, and employees receive and update work b
 `CLAUDE.md` is the product and engineering source of truth; `docs/decisions.md` records
 decisions and measurements.
 
-**Status:** Phase 2 — sign-in, roles, teams and permission checks on top of the Phase 1
-foundation (backend, frontend, database, migrations, health checks).
+**Status:** Phase 3 — task core (lifecycle, assignment, history, idempotency, no double
+assignment) on top of sign-in/roles (Phase 2) and the foundation (Phase 1).
 
 ## Layout
 
@@ -31,6 +31,7 @@ cd frontend; npm install; cd ..
 
 # Optional: clearly labelled DEMO organization and accounts (passwords go to the file, never git)
 cd backend; .\.venv\Scripts\python.exe -m app.cli.seed_demo --credentials-file D:\tools\voiceflow-demo-logins.txt; cd ..
+cd backend; .\.venv\Scripts\python.exe -m app.cli.seed_demo_tasks; cd ..   # a few [DEMO] tasks
 ```
 
 Requires Python 3.11 (`py -3.11`), Node 24+, and the portable PostgreSQL in `D:\tools\pgsql`.

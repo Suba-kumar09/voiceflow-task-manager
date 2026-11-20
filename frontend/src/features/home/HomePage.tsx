@@ -1,4 +1,6 @@
 import { useMe } from '../auth/auth-context'
+import { MyWork } from '../tasks/MyWork'
+import { TeamTasks } from '../tasks/TeamTasks'
 import { TeamRoster } from './TeamRoster'
 
 function VoiceComingSoon() {
@@ -38,31 +40,19 @@ export function HomePage() {
           {managed.length === 0 ? (
             <p className="text-sm text-ink-muted">You are not assigned to manage any team yet.</p>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-4">
               {managed.map((t) => (
-                <TeamRoster key={t.team_id} teamId={t.team_id} teamName={t.team_name} />
+                <div key={t.team_id} className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+                  <TeamTasks teamId={t.team_id} teamName={t.team_name} />
+                  <TeamRoster teamId={t.team_id} teamName={`${t.team_name} people`} />
+                </div>
               ))}
             </div>
           )}
         </section>
       )}
 
-      {me.role === 'EMPLOYEE' && (
-        <section
-          aria-labelledby="my-work"
-          className="rounded-2xl border border-line bg-panel p-5 shadow-sm"
-        >
-          <h2 id="my-work" className="text-lg font-semibold">
-            Your work
-          </h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            {memberOf.length > 0
-              ? `You are on the ${memberOf.map((t) => t.team_name).join(', ')} team.`
-              : 'You are not on a team yet. Your manager will add you.'}{' '}
-            Your tasks will appear here once task management is added.
-          </p>
-        </section>
-      )}
+      {me.role === 'EMPLOYEE' && <MyWork teamNames={memberOf.map((t) => t.team_name)} />}
 
       {me.role === 'ADMIN' && (
         <section

@@ -10,9 +10,11 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -76,12 +78,17 @@ class User(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Max tasks this person may actively hold (ASSIGNED/ACCEPTED/IN_PROGRESS/BLOCKED). D4.
+    wip_limit: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
 
     memberships: Mapped[list["TeamMembership"]] = relationship(back_populates="user")
 
     __table_args__ = (
         Index("ix_users_organization_id", "organization_id"),
         CheckConstraint("username = lower(username)", name="username_lowercase"),
+        CheckConstraint("wip_limit BETWEEN 0 AND 20", name="wip_limit_range"),
     )
 
 
