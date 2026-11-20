@@ -5,9 +5,14 @@ orchestrator assigns all eligible tasks, and employees receive and update work b
 `CLAUDE.md` is the product and engineering source of truth; `docs/decisions.md` records
 decisions and measurements.
 
-**Status:** Phase 5 — dark-themed manager and employee screens (projects, project tabs,
-team, my work, notifications) with on-screen actions, on top of the orchestrator (Phase 4),
-task core (Phase 3), sign-in/roles (Phase 2) and the foundation (Phase 1). Voice is next.
+**Status:** Phase 6 — voice foundation: push-to-talk, local speech recognition
+(faster-whisper), spoken replies, voice navigation and read-only voice questions, on top of the
+dark-themed screens (Phase 5), orchestrator (Phase 4), task core (Phase 3), sign-in/roles
+(Phase 2) and the foundation (Phase 1). Voice commands that change data are next (Phase 7).
+
+Voice needs the optional extra and the model folder:
+`pip install -e ".[voice]"` in `backend/`, and `HF_HOME=D:\ai-cache\hf` when starting the API.
+Use Chrome or Edge and allow the microphone when asked.
 
 ## Layout
 

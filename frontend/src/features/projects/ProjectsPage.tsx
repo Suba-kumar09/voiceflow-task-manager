@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 
 import { Empty, ErrorBox, Loading, ProgressBar } from '../../components/ui/States'
 import { projectsApi, type Project } from '../../services/api'
+import { usePageSummary } from '../../voice/pageSummary'
 import { useMe } from '../auth/auth-context'
 import { ProjectBadge } from '../tasks/Badges'
 
@@ -64,6 +65,12 @@ export function ProjectsPage() {
   const teamName = (id: string) => me.teams.find((t) => t.team_id === id)?.team_name ?? 'Team'
   const list = projects.data ?? []
   const count = (s: Project['status']) => list.filter((p) => p.status === s).length
+  usePageSummary(
+    `Projects. You have ${list.length} project${list.length === 1 ? '' : 's'}: ${count('ACTIVE')} active, ` +
+      `${count('READY')} ready to start, ${count('DRAFT')} in draft. ` +
+      list.map((p) => p.name.replace('[DEMO] ', '')).join(', ') +
+      '.',
+  )
 
   return (
     <div className="flex flex-col gap-6">

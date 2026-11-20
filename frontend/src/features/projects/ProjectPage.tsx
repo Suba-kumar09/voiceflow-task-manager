@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Card, Empty, ErrorBox, Loading, ProgressBar } from '../../components/ui/States'
 import { projectsApi, tasksApi, type Progress, type Task, type TaskStatus } from '../../services/api'
+import { usePageSummary } from '../../voice/pageSummary'
 import { useMe } from '../auth/auth-context'
 import { Priority, ProjectBadge, StatusBadge } from '../tasks/Badges'
 import { TaskActions } from '../tasks/TaskActions'
@@ -206,6 +207,15 @@ export function ProjectPage() {
   const tasks = useQuery({ queryKey: ['tasks', 'project', projectId], queryFn: () => tasksApi.forProject(projectId) })
   const approve = useMutation({ mutationFn: () => projectsApi.approveBacklog(projectId), onSuccess: () => qc.invalidateQueries() })
   const start = useMutation({ mutationFn: () => projectsApi.start(projectId), onSuccess: () => qc.invalidateQueries() })
+
+  const s = progress.data
+  usePageSummary(
+    s
+      ? `${s.name.replace('[DEMO] ', '')}, ${tab} tab. ${s.completed} of ${s.total} tasks done. ` +
+          `${s.in_progress} in progress, ${s.ready_to_assign} ready to assign, ${s.waiting_on_dependencies} waiting on other tasks, ` +
+          `${s.blocked_by_issue} blocked, ${s.awaiting_review} awaiting review, ${s.needs_decision.length} needing your decision.`
+      : 'Project page, loading.',
+  )
 
   if (project.isLoading) return <Loading label="Loading project…" />
   if (project.isError) return <ErrorBox error={project.error} />

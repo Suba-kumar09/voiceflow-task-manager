@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { Card, Empty, ErrorBox, Loading } from '../../components/ui/States'
 import { tasksApi } from '../../services/api'
+import { usePageSummary } from '../../voice/pageSummary'
 import { useMe } from '../auth/auth-context'
 import { Priority, StatusBadge } from '../tasks/Badges'
 import { TaskActions } from '../tasks/TaskActions'
@@ -15,6 +16,12 @@ export function MyWorkPage() {
   const due = task ? formatDue(task.due_at, task.timezone) : null
   const others = (mine.data?.items ?? []).filter((t) => t.id !== task?.id)
   const reviewCount = others.filter((t) => t.status === 'PENDING_REVIEW').length
+  usePageSummary(
+    task
+      ? `My work. Your current task is ${task.title}, ${priorityLabel[task.priority].toLowerCase()} priority${due ? `, due ${due}` : ''}. ` +
+          `You have ${others.length} other task${others.length === 1 ? '' : 's'}${reviewCount ? `, ${reviewCount} waiting for review` : ''}.`
+      : `My work. You have no active task right now.${reviewCount ? ` ${reviewCount} of your tasks are waiting for review.` : ''}`,
+  )
 
   return (
     <div className="flex flex-col gap-6">

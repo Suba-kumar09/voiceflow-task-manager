@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Avatar } from '../../components/ui/Avatar'
 import { Card, Empty, ErrorBox, Loading } from '../../components/ui/States'
 import { peopleApi } from '../../services/api'
+import { usePageSummary } from '../../voice/pageSummary'
 import { useMe } from '../auth/auth-context'
 
 function TeamRoster({ teamId, teamName }: { teamId: string; teamName: string }) {
@@ -31,6 +32,10 @@ function TeamRoster({ teamId, teamName }: { teamId: string; teamName: string }) 
 export function TeamPage() {
   const me = useMe()
   const managed = me.teams.filter((t) => t.membership_role === 'MANAGER')
+  usePageSummary(
+    `Team page. You manage ${managed.map((t) => t.team_name).join(', ') || 'no teams yet'}. ` +
+      'Workload and current tasks are on each project’s Team tab.',
+  )
   return (
     <div className="flex flex-col gap-6">
       <div>

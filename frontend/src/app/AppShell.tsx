@@ -6,6 +6,8 @@ import { Avatar } from '../components/ui/Avatar'
 import { useAuth, useMe } from '../features/auth/auth-context'
 import { useNotifications } from '../features/notifications/useNotifications'
 import { projectsApi } from '../services/api'
+import { PageSummaryContext } from '../voice/pageSummary'
+import { VoicePanel } from '../voice/VoicePanel'
 import { brand } from './brand'
 
 const ICONS = {
@@ -71,35 +73,6 @@ function SidebarProjects() {
   )
 }
 
-/** Slot for the voice assistant (Phase 6). It never pretends the microphone is on. */
-function VoicePanel() {
-  return (
-    <section aria-label="Voice assistant" className="sticky bottom-0 border-t border-line bg-panel-2/95 px-6 py-3 backdrop-blur">
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          disabled
-          aria-label="Voice control is not available yet"
-          className="grid size-12 shrink-0 cursor-not-allowed place-items-center rounded-full border border-control-line bg-control text-ink-faint"
-        >
-          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="2" width="6" height="12" rx="3" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="22" />
-          </svg>
-        </button>
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-            <span aria-hidden="true" className="size-2 rounded-full bg-[#4b5b74]" />
-            Microphone off
-          </p>
-          <p className="text-sm text-ink-muted">Voice control arrives in the next phase. Until then, use the buttons on screen.</p>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export function AppShell({ children }: { children: ReactNode }) {
   const me = useMe()
   const { signOut } = useAuth()
@@ -107,8 +80,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const notes = useNotifications()
   const unread = notes.data?.unread ?? 0
   const isEmployee = me.role === 'EMPLOYEE'
+  const [summary] = useState(() => ({ current: '' }))
 
   return (
+    <PageSummaryContext.Provider value={summary}>
     <div className="flex min-h-dvh flex-wrap font-sans">
       <aside className="flex w-full flex-col gap-6 border-r border-[#172236] bg-sidebar px-3 py-5 md:sticky md:top-0 md:h-dvh md:w-64 md:overflow-y-auto">
         <div className="flex items-center gap-2.5 px-2">
@@ -166,5 +141,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <VoicePanel />
       </div>
     </div>
+    </PageSummaryContext.Provider>
   )
 }

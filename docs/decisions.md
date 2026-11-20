@@ -84,6 +84,20 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | U5 | The voice panel is present but shows "Microphone off — voice arrives in the next phase" with a disabled button. | A visual indicator must never imply the microphone is active. |
 | U6 | Task status UNASSIGNED is shown as **Open** (assignee column says "Not assigned"). | Avoids the same words twice in a row. |
 
+## 2026-11-21 — Phase 6: voice foundation
+
+| # | Decision | Why |
+|---|---|---|
+| V1 | Speech-to-text behind `SpeechToTextProvider`; default **faster-whisper `base.en`**, CPU int8, VAD filter, English, one transcription at a time, model loaded once on first use. Installed as the optional `voice` extra; tests use `FakeSpeechToText`. Measured through the running app: **~1.1 s per spoken command** (first call ~2.8 s while the model loads). | Local, free, fast enough on this laptop (Phase 0). |
+| V2 | The recogniser gets **name hints** (teammates and the user's projects). A turn is acted on only if the recognition looks confident (`no_speech_prob < 0.6`, `avg_logprob > -1.0`); otherwise "please say it again" and nothing happens. | Names are the hardest words; never act on a mumble. |
+| V3 | Audio is validated before recognition: 16 kHz, mono, 16-bit PCM WAV, 0.2–20 s (413/422 otherwise). The browser records only between pressing the microphone and the automatic stop (≈1.2 s of silence after speech, 15 s max), releases the microphone immediately, and resamples to 16 kHz. | Privacy and predictable server load. |
+| V4 | **Rule-based intent parser** (`app/agent/intents.py`), no LLM: navigation (projects, a named project and tab, team, my work, notifications, system, back, home), read-only questions (my task, notifications, what is pending), read this page, help, stop, repeat. Change commands ("I've completed…", "approve", "assign", including the misheard "a signed") are recognised and answered "not by voice yet" — **nothing changes** in Phase 6. | Instant, deterministic, testable; Phase 0 showed the local LLM is too slow and unreliable. |
+| V5 | Spoken project names are matched only against projects the user may see (exact → contains → fuzzy ≥ 0.75). Several matches or none → a clarifying question listing the real options. Manager-only pages are refused for employees with a spoken reason. | Never guess, never reveal other teams' or organisations' projects. |
+| V6 | Every spoken answer comes from the same authorized services the screens use (current task, progress breakdown, unread notifications). "Read this page" speaks the summary each screen registers. | Grounded answers only. |
+| V7 | Text-to-speech: the browser's built-in voices (local on Windows), preferring en-IN, behind `TextToSpeech`. **Mute** stops recording and speech; captions always show both sides; **Type instead** sends the same command as text. | Accessible fallback; Piper is blocked by Smart App Control (Phase 0). |
+| V8 | Privacy: audio is never stored; transcripts are not written to logs (only intent, outcome and timings). | CLAUDE.md sections 5.4, 14, 16. |
+| V9 | Not yet: wake word, streaming recognition, Tamil, per-user rate limit on voice turns, persisted agent traces (Phase 7 harness). | Smallest useful slice. |
+
 ## 2026-11-20 — Phase 0 measurements (this laptop)
 
 Hardware: AMD Ryzen 3 7320U (4C/8T), ~8 GB RAM, integrated GPU (no CUDA), Windows 11 with

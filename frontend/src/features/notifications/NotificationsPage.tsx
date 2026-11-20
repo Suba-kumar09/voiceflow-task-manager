@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { Button } from '../../components/ui/Button'
 import { Card, Empty, ErrorBox, Loading } from '../../components/ui/States'
 import { notificationsApi, type AppNotification } from '../../services/api'
+import { usePageSummary } from '../../voice/pageSummary'
 import { useMe } from '../auth/auth-context'
 import { timeAgo } from '../tasks/taskLabels'
 import { useNotifications } from './useNotifications'
@@ -25,6 +26,11 @@ export function NotificationsPage() {
   const notes = useNotifications()
   const read = useMutation({ mutationFn: notificationsApi.markRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
   const isManager = me.role !== 'EMPLOYEE'
+  const unreadItems = (notes.data?.items ?? []).filter((n) => !n.read)
+  usePageSummary(
+    `Notifications. ${unreadItems.length} unread.` +
+      (unreadItems.length ? ' ' + unreadItems.slice(0, 3).map((n) => n.title + '.').join(' ') : ''),
+  )
 
   return (
     <div className="flex flex-col gap-6">

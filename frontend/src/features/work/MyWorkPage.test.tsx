@@ -55,6 +55,6 @@ describe('my work (employee)', () => {
     })
     render(<App />)
     expect(await screen.findByText('Nothing assigned right now')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Voice control is not available yet' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Talk to VoiceFlow' })).toBeEnabled()
   })
 })

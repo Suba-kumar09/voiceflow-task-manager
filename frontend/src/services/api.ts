@@ -243,12 +243,15 @@ interface RequestOptions {
   /** Do not trigger the global sign-out handler on 401 (used by the sign-in call itself). */
   ignoreUnauthorized?: boolean
   idempotencyKey?: string
+  /** Send these bytes as-is (e.g. audio/wav) instead of a JSON body. */
+  raw?: { data: Blob; contentType: string }
 }
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? 'GET'
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (opts.raw) headers['Content-Type'] = opts.raw.contentType
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken
   if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey
 
@@ -258,7 +261,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       method,
       credentials: 'same-origin',
       headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.raw ? opts.raw.data : opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     })
   } catch {
     throw new ApiError(0, 'network_error', 'Cannot reach the VoiceFlow server.')
@@ -349,6 +352,40 @@ export const projectsApi = {
     request<unknown>(`/api/v1/projects/${q(id)}/approve-backlog`, { method: 'POST' }),
   start: (id: string) =>
     request<Evaluation>(`/api/v1/projects/${q(id)}/start`, { method: 'POST' }),
+}
+
+export interface VoiceTurn {
+  transcript: string | null
+  heard_clearly: boolean
+  intent: string
+  slots: Record<string, string>
+  outcome: 'ok' | 'clarify' | 'repeat' | 'unsupported' | 'not_yet' | 'denied'
+  speech: string
+  action: { type: 'navigate'; to: string } | { type: 'back' } | { type: 'stop' } | { type: 'repeat' } | null
+  suggestions: string[]
+  stt_ms: number | null
+  total_ms: number
+}
+
+export interface VoiceContext {
+  path: string
+  pageSummary?: string
+}
+
+export const voiceApi = {
+  text: (text: string, ctx: VoiceContext) =>
+    request<VoiceTurn>('/api/v1/voice/turns', {
+      method: 'POST',
+      body: { text, path: ctx.path, page_summary: ctx.pageSummary?.slice(0, 1000) },
+    }),
+  audio: (wav: Blob, ctx: VoiceContext) => {
+    const qs = new URLSearchParams({ path: ctx.path })
+    if (ctx.pageSummary) qs.set('page_summary', ctx.pageSummary.slice(0, 900))
+    return request<VoiceTurn>(`/api/v1/voice/turns/audio?${qs}`, {
+      method: 'POST',
+      raw: { data: wav, contentType: 'audio/wav' },
+    })
+  },
 }
 
 export const notificationsApi = {

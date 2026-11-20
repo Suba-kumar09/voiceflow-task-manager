@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_failure_window_minutes: int = 15
 
+    # --- Voice (Phase 6) ---
+    stt_provider: Literal["faster-whisper", "disabled"] = "faster-whisper"
+    stt_model: str = "base.en"  # downloaded to HF_HOME (D:\ai-cache\hf on the dev laptop)
+    stt_cpu_threads: int = 4
+    stt_max_seconds: float = 20.0
+
     @property
     def cookie_secure(self) -> bool:
         if self.session_cookie_secure is not None:
