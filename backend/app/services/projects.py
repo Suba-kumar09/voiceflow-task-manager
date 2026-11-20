@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.auth.principal import Principal
 from app.models import (
+    ACTIVE_HOLD_STATUSES,
     AuditOutcome,
     EvidencePolicy,
     Organization,
@@ -28,6 +29,7 @@ from app.models import (
     TaskStatusHistory,
     Team,
     TeamMembership,
+    User,
     UserSkill,
 )
 from app.models.common import utcnow
@@ -425,6 +427,68 @@ def progress(db: Session, p: Principal, project_id: uuid.UUID) -> dict:
         "draft": counts.get(TaskStatus.DRAFT, 0),
         "cancelled": counts.get(TaskStatus.CANCELLED, 0),
     }
+
+
+def project_team(db: Session, p: Principal, project_id: uuid.UUID) -> list[dict]:
+    """Managers' view of the project's people: skills, workload and what each is doing.
+    Restricted to managers/admins (employees only see their own work — decision A7)."""
+    project = load_project(db, p, project_id, manage=True)
+    people = db.execute(
+        select(User, TeamMembership.membership_role)
+        .join(TeamMembership, TeamMembership.user_id == User.id)
+        .where(TeamMembership.team_id == project.team_id, User.organization_id == p.organization_id)
+        .order_by(TeamMembership.membership_role.desc(), User.display_name)
+    ).all()
+    ids = [u.id for u, _ in people]
+    skills: dict[uuid.UUID, list[str]] = {}
+    for uid, name in db.execute(
+        select(UserSkill.user_id, Skill.name)
+        .join(Skill, Skill.id == UserSkill.skill_id)
+        .where(UserSkill.user_id.in_(ids))
+        .order_by(Skill.name)
+    ).all():
+        skills.setdefault(uid, []).append(name)
+    held: dict[uuid.UUID, list[Task]] = {}
+    for task in db.execute(
+        select(Task)
+        .where(Task.assigned_to.in_(ids), Task.status.in_(ACTIVE_HOLD_STATUSES))
+        .order_by(Task.updated_at.desc())
+    ).scalars():
+        held.setdefault(task.assigned_to, []).append(task)
+    done = dict(
+        db.execute(
+            select(Task.assigned_to, func.count())
+            .where(Task.project_id == project.id, Task.status == TaskStatus.COMPLETED)
+            .group_by(Task.assigned_to)
+        ).all()
+    )
+    out = []
+    for user, role in people:
+        tasks_held = held.get(user.id, [])
+        current = tasks_held[0] if tasks_held else None
+        out.append(
+            {
+                "id": str(user.id),
+                "display_name": user.display_name,
+                "membership_role": role.value,
+                "is_active": user.is_active,
+                "skills": skills.get(user.id, []),
+                "active_tasks": len(tasks_held),
+                "wip_limit": user.wip_limit,
+                "completed_in_project": done.get(user.id, 0),
+                "current_task": (
+                    {
+                        "id": str(current.id),
+                        "key": current.external_key,
+                        "title": current.title,
+                        "status": current.status.value,
+                    }
+                    if current
+                    else None
+                ),
+            }
+        )
+    return out
 
 
 def project_dependencies(db: Session, project_id: uuid.UUID) -> dict[uuid.UUID, list[str]]:

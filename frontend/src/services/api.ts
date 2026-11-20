@@ -61,6 +61,146 @@ export interface Page<T> {
   offset: number
 }
 
+export type TaskStatus =
+  | 'DRAFT'
+  | 'UNASSIGNED'
+  | 'ASSIGNED'
+  | 'ACCEPTED'
+  | 'IN_PROGRESS'
+  | 'BLOCKED'
+  | 'PENDING_REVIEW'
+  | 'COMPLETED'
+  | 'CANCELLED'
+
+export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
+export type EvidencePolicy = 'NONE' | 'NOTE' | 'LINK' | 'MANAGER_APPROVAL'
+
+export interface Task {
+  id: string
+  team_id: string
+  project_id: string | null
+  external_key: string | null
+  title: string
+  description: string
+  acceptance_criteria: string
+  priority: TaskPriority
+  status: TaskStatus
+  assignee: { id: string; display_name: string } | null
+  due_at: string | null
+  timezone: string
+  requires_approval: boolean
+  evidence_policy: EvidencePolicy
+  version: number
+  created_at: string
+  updated_at: string
+  depends_on: string[]
+  required_skills: string[]
+}
+
+export type ProjectStatus = 'DRAFT' | 'READY' | 'ACTIVE' | 'PAUSED' | 'CLOSED'
+
+export interface Project {
+  id: string
+  team_id: string
+  name: string
+  description: string
+  status: ProjectStatus
+  created_at: string
+  backlog_approved_at: string | null
+  started_at: string | null
+}
+
+export interface DecisionItem {
+  task_id: string
+  key: string
+  title: string
+  reason: string
+}
+
+export interface Progress {
+  project_id: string
+  name: string
+  status: ProjectStatus
+  total: number
+  completed: number
+  percent_complete: number
+  in_progress: number
+  ready_to_assign: number
+  waiting_on_dependencies: number
+  blocked_by_issue: number
+  awaiting_review: number
+  needs_decision: DecisionItem[]
+  draft: number
+  cancelled: number
+}
+
+export interface PlanItem {
+  task_id: string
+  key: string
+  title: string
+  priority: TaskPriority
+  outcome: 'ASSIGN' | 'NO_CAPACITY' | 'NO_QUALIFIED'
+  reason: string
+  assignee_id?: string | null
+  assignee_name?: string | null
+}
+
+export interface EvaluationItem {
+  task_id: string
+  key: string
+  title: string
+  priority: TaskPriority
+  reason: string
+  assignee_name?: string
+}
+
+export interface Evaluation {
+  project_id: string
+  assigned: EvaluationItem[]
+  waiting_for_capacity: EvaluationItem[]
+  needs_decision: EvaluationItem[]
+  skipped: EvaluationItem[]
+}
+
+export interface TeamMember {
+  id: string
+  display_name: string
+  membership_role: MembershipRole
+  is_active: boolean
+  skills: string[]
+  active_tasks: number
+  wip_limit: number
+  completed_in_project: number
+  current_task: { id: string; key: string | null; title: string; status: TaskStatus } | null
+}
+
+export interface AppNotification {
+  id: string
+  kind:
+    | 'TASK_ASSIGNED'
+    | 'COMPLETION_SUBMITTED'
+    | 'COMPLETION_APPROVED'
+    | 'COMPLETION_REJECTED'
+    | 'TASK_BLOCKED'
+    | 'TASK_DECLINED'
+    | 'PROJECT_SUMMARY'
+    | 'NEEDS_DECISION'
+  title: string
+  body: string
+  task_id: string | null
+  project_id: string | null
+  created_at: string
+  read: boolean
+}
+
+export interface NotificationPage {
+  items: AppNotification[]
+  total: number
+  unread: number
+  limit: number
+  offset: number
+}
+
 // ---------------------------------------------------------------- transport
 
 let csrfToken: string | null = null
@@ -74,6 +214,12 @@ export function setCsrfToken(token: string | null): void {
 let onUnauthorized: (() => void) | null = null
 export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler
+}
+
+/** A fresh key per user action, so a network retry of the same action is applied once. */
+export function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 async function toApiError(resp: Response): Promise<ApiError> {
@@ -96,6 +242,7 @@ interface RequestOptions {
   acceptStatuses?: number[]
   /** Do not trigger the global sign-out handler on 401 (used by the sign-in call itself). */
   ignoreUnauthorized?: boolean
+  idempotencyKey?: string
 }
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
@@ -103,6 +250,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken
+  if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey
 
   let resp: Response
   try {
@@ -130,6 +278,8 @@ export function getJson<T>(path: string, acceptStatuses: number[] = []): Promise
   return request<T>(path, { acceptStatuses })
 }
 
+const q = encodeURIComponent
+
 // ---------------------------------------------------------------- endpoints
 
 export const systemApi = {
@@ -151,49 +301,58 @@ export const authApi = {
 
 export const peopleApi = {
   teamEmployees: (teamId: string) =>
-    request<Page<EmployeeSummary>>(`/api/v1/teams/${encodeURIComponent(teamId)}/employees?limit=200`),
+    request<Page<EmployeeSummary>>(`/api/v1/teams/${q(teamId)}/employees?limit=200`),
 }
 
-// ---------------------------------------------------------------- tasks
-
-export type TaskStatus =
-  | 'DRAFT'
-  | 'UNASSIGNED'
-  | 'ASSIGNED'
-  | 'ACCEPTED'
-  | 'IN_PROGRESS'
-  | 'BLOCKED'
-  | 'PENDING_REVIEW'
-  | 'COMPLETED'
-  | 'CANCELLED'
-
-export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-
-export interface Task {
-  id: string
-  team_id: string
-  project_id: string | null
-  external_key: string | null
-  title: string
-  description: string
-  acceptance_criteria: string
-  priority: TaskPriority
-  status: TaskStatus
-  assignee: { id: string; display_name: string } | null
-  due_at: string | null
-  timezone: string
-  requires_approval: boolean
-  evidence_policy: 'NONE' | 'NOTE' | 'LINK' | 'MANAGER_APPROVAL'
-  version: number
-  created_at: string
-  updated_at: string
-}
+export type TaskActionPath =
+  | 'accept'
+  | 'decline'
+  | 'start'
+  | 'block'
+  | 'resume'
+  | 'request-completion'
+  | 'approve-completion'
+  | 'reject-completion'
+  | 'cancel'
 
 export const tasksApi = {
   list: (teamId?: string) =>
-    request<Page<Task>>(
-      `/api/v1/tasks?limit=200${teamId ? `&team_id=${encodeURIComponent(teamId)}` : ''}`,
-    ),
+    request<Page<Task>>(`/api/v1/tasks?limit=200${teamId ? `&team_id=${q(teamId)}` : ''}`),
+  forProject: (projectId: string) =>
+    request<Page<Task>>(`/api/v1/tasks?limit=200&project_id=${q(projectId)}`),
   mine: () => request<Page<Task>>('/api/v1/me/tasks?limit=200'),
   current: () => request<{ task: Task | null }>('/api/v1/me/tasks/current'),
+  action: (
+    taskId: string,
+    path: TaskActionPath,
+    body: { reason?: string; note?: string; link?: string } = {},
+  ) =>
+    request<Task>(`/api/v1/tasks/${q(taskId)}/${path}`, {
+      method: 'POST',
+      body,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+}
+
+export const projectsApi = {
+  list: () => request<Project[]>('/api/v1/projects'),
+  get: (id: string) => request<Project>(`/api/v1/projects/${q(id)}`),
+  progress: (id: string) => request<Progress>(`/api/v1/projects/${q(id)}/progress`),
+  team: (id: string) => request<TeamMember[]>(`/api/v1/projects/${q(id)}/team`),
+  plan: (id: string) => request<PlanItem[]>(`/api/v1/projects/${q(id)}/assignment-plan`),
+  assignReady: (id: string) =>
+    request<Evaluation>(`/api/v1/projects/${q(id)}/assign-ready`, {
+      method: 'POST',
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  approveBacklog: (id: string) =>
+    request<unknown>(`/api/v1/projects/${q(id)}/approve-backlog`, { method: 'POST' }),
+  start: (id: string) =>
+    request<Evaluation>(`/api/v1/projects/${q(id)}/start`, { method: 'POST' }),
+}
+
+export const notificationsApi = {
+  list: () => request<NotificationPage>('/api/v1/notifications?limit=100'),
+  markRead: (id: string) =>
+    request<void>(`/api/v1/notifications/${q(id)}/read`, { method: 'POST' }),
 }

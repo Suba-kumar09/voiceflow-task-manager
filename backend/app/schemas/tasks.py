@@ -91,6 +91,8 @@ class TaskOut(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    depends_on: list[str] = Field(default_factory=list, description="Keys of predecessor tasks")
+    required_skills: list[str] = Field(default_factory=list)
 
 
 class CurrentTaskOut(BaseModel):

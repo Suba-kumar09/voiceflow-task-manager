@@ -365,6 +365,29 @@ def test_person_freed_by_other_work_gets_the_waiting_project_task(as_user, skill
     assert t1.status is TaskStatus.ASSIGNED and t1.assigned_to == w["emp_web_1"]
 
 
+def test_project_task_list_shows_dependencies_and_skills(as_user, skilled_world):
+    mgr, project, _ = started_project(as_user, skilled_world)
+    items = mgr.get(f"/tasks?project_id={project['id']}&limit=200").json()["items"]
+    by_key = {t["external_key"]: t for t in items}
+    assert set(by_key) == {"T1", "T2", "T3", "T4", "T5", "T6"}
+    assert by_key["T4"]["depends_on"] == ["T2", "T3"]
+    assert by_key["T4"]["required_skills"] == ["React"]
+    # An employee filtering by project still only sees their own tasks.
+    mine = as_user("emp_web_1").get(f"/tasks?project_id={project['id']}").json()["items"]
+    assert [t["external_key"] for t in mine] == ["T1"]
+
+
+def test_project_team_view_is_for_managers_only(as_user, skilled_world):
+    mgr, project, _ = started_project(as_user, skilled_world)
+    team = {m["display_name"]: m for m in mgr.get(f"/projects/{project['id']}/team").json()}
+    emp1 = team["Emp Web 1"]
+    assert emp1["skills"] == ["APIs", "Python"]
+    assert emp1["active_tasks"] == 1 and emp1["wip_limit"] == 1
+    assert emp1["current_task"]["key"] == "T1"
+    assert team["Manager Web"]["membership_role"] == "MANAGER"
+    assert as_user("emp_web_1").get(f"/projects/{project['id']}/team").status_code == 403
+
+
 # ----------------------------------------------------------------------------- notifications
 
 

@@ -5,11 +5,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.auth.principal import CurrentPrincipal, MutatingPrincipal, Principal
 from app.db.session import get_db
-from app.models import Task, TaskStatus, User
+from app.models import Skill, Task, TaskDependency, TaskRequiredSkill, TaskStatus, User
 from app.schemas.identity import Page
 from app.schemas.tasks import (
     AssignIn,
@@ -40,6 +40,25 @@ def _to_out(db: Session, tasks: list[Task]) -> list[TaskOut]:
         if ids
         else {}
     )
+    task_ids = [t.id for t in tasks]
+    deps: dict = {}
+    skills: dict = {}
+    if task_ids:
+        pred = aliased(Task)
+        for tid, key, title in db.execute(
+            select(TaskDependency.task_id, pred.external_key, pred.title)
+            .join(pred, pred.id == TaskDependency.depends_on_task_id)
+            .where(TaskDependency.task_id.in_(task_ids))
+            .order_by(pred.external_key, pred.title)
+        ).all():
+            deps.setdefault(tid, []).append(key or title)
+        for tid, name in db.execute(
+            select(TaskRequiredSkill.task_id, Skill.name)
+            .join(Skill, Skill.id == TaskRequiredSkill.skill_id)
+            .where(TaskRequiredSkill.task_id.in_(task_ids))
+            .order_by(Skill.name)
+        ).all():
+            skills.setdefault(tid, []).append(name)
     return [
         TaskOut(
             id=t.id,
@@ -63,6 +82,8 @@ def _to_out(db: Session, tasks: list[Task]) -> list[TaskOut]:
             version=t.version,
             created_at=t.created_at,
             updated_at=t.updated_at,
+            depends_on=deps.get(t.id, []),
+            required_skills=skills.get(t.id, []),
         )
         for t in tasks
     ]
@@ -132,11 +153,18 @@ def list_tasks(
     db: DB,
     status_filter: Annotated[list[TaskStatus] | None, Query(alias="status")] = None,
     team_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[TaskOut]:
     tasks, total = service.list_tasks(
-        db, p, statuses=status_filter or (), team_id=team_id, limit=limit, offset=offset
+        db,
+        p,
+        statuses=status_filter or (),
+        team_id=team_id,
+        project_id=project_id,
+        limit=limit,
+        offset=offset,
     )
     return Page(items=_to_out(db, tasks), total=total, limit=limit, offset=offset)
 

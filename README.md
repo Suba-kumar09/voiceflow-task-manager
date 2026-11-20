@@ -5,9 +5,9 @@ orchestrator assigns all eligible tasks, and employees receive and update work b
 `CLAUDE.md` is the product and engineering source of truth; `docs/decisions.md` records
 decisions and measurements.
 
-**Status:** Phase 4 — projects, backlog import + validation, dependencies, skills, the
-deterministic orchestrator (automatic assignment) and notifications, on top of the task core
-(Phase 3), sign-in/roles (Phase 2) and the foundation (Phase 1).
+**Status:** Phase 5 — dark-themed manager and employee screens (projects, project tabs,
+team, my work, notifications) with on-screen actions, on top of the orchestrator (Phase 4),
+task core (Phase 3), sign-in/roles (Phase 2) and the foundation (Phase 1). Voice is next.
 
 ## Layout
 

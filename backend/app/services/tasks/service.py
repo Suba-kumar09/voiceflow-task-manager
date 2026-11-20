@@ -236,6 +236,7 @@ def list_tasks(
     *,
     statuses: Sequence[TaskStatus] = (),
     team_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
     assigned_to_me: bool = False,
     limit: int = 50,
     offset: int = 0,
@@ -254,6 +255,8 @@ def list_tasks(
         stmt = stmt.where(Task.status.in_(statuses))
     if team_id is not None:
         stmt = stmt.where(Task.team_id == team_id)
+    if project_id is not None:
+        stmt = stmt.where(Task.project_id == project_id)
 
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     rank = case(PRIORITY_RANK, value=Task.priority, else_=0)

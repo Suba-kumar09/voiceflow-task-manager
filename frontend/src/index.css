@@ -1,42 +1,46 @@
 @import "tailwindcss";
 
-/* Design tokens: calm neutral palette with one restrained accent (teal). */
+/* VoiceFlow dark theme: deep navy surfaces, one teal accent, status colours tuned for dark. */
 @theme {
-  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 
-  --color-surface: #f7f8fa;
-  --color-panel: #ffffff;
-  --color-line: #e3e6eb;
-  --color-ink: #16191f;
-  --color-ink-muted: #5b6370;
+  --color-surface: #0b1220;      /* page background */
+  --color-sidebar: #070c16;
+  --color-panel: #111a2b;        /* cards */
+  --color-panel-2: #0e1626;      /* header, voice bar */
+  --color-inset: #0d1524;        /* wells inside cards */
+  --color-line: #1f2b40;
+  --color-line-soft: #1a2539;
+  --color-control: #16223a;      /* secondary buttons, chips */
+  --color-control-line: #2a3a55;
 
-  --color-accent: #0f766e;
-  --color-accent-soft: #e6f4f2;
+  --color-ink: #e6ebf2;
+  --color-ink-strong: #ffffff;
+  --color-ink-muted: #94a3b8;
+  --color-ink-faint: #7c8aa0;
 
-  --color-ok: #15803d;
-  --color-warn: #b45309;
-  --color-bad: #b91c1c;
-}
+  --color-accent: #14b8a6;
+  --color-accent-strong: #2dd4bf;
+  --color-accent-ink: #04201c;   /* text on accent backgrounds */
+  --color-accent-soft: #12302d;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-surface: #0f1115;
-    --color-panel: #171a20;
-    --color-line: #2a2f38;
-    --color-ink: #eef0f3;
-    --color-ink-muted: #a3aab5;
-    --color-accent: #2dd4bf;
-    --color-accent-soft: #10302d;
-    --color-ok: #4ade80;
-    --color-warn: #fbbf24;
-    --color-bad: #f87171;
-  }
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  --color-info: #7dd3fc;
+  --color-violet: #c4b5fd;
 }
 
 html,
 body {
   background: var(--color-surface);
   color: var(--color-ink);
+  color-scheme: dark;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

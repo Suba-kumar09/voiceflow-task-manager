@@ -149,6 +149,12 @@ def project_progress(project_id: uuid.UUID, p: CurrentPrincipal, db: DB) -> Prog
     return ProgressOut(**svc.progress(db, p, project_id))
 
 
+@router.get("/projects/{project_id}/team")
+def project_team(project_id: uuid.UUID, p: CurrentPrincipal, db: DB) -> list[dict]:
+    """Managers only: each person's skills, workload and current task."""
+    return svc.project_team(db, p, project_id)
+
+
 @router.get("/projects/{project_id}/assignment-plan", response_model=list[PlanItemOut])
 def assignment_plan(project_id: uuid.UUID, p: CurrentPrincipal, db: DB) -> list[PlanItemOut]:
     """What VoiceFlow would assign right now, with reasons. Changes nothing (read back for

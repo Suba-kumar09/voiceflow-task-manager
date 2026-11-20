@@ -73,6 +73,17 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | P8 | **Notifications** (in-app, stored): employee on assignment, approval, rejection; team managers on completion submitted (with the note), blocked, declined, needs decision, and a summary when the orchestrator assigns. Written in the same transaction as the change. Voice delivery reads these in Phase 6+. | "Employee says done → manager is told" is guaranteed by the data model, not by the UI. |
 | P9 | Not yet: pause/resume/close project, CSV import, skill management UI/API (skills are set by seed/admin helper for now). | Smallest useful slice. |
 
+## 2026-11-21 — Phase 5: real screens (dark theme)
+
+| # | Decision | Why |
+|---|---|---|
+| U1 | **Dark theme is the default** (owner request): navy surfaces, one teal accent, status colours tuned for dark; existing colour token names kept so every screen switched at once. No web fonts are downloaded (local-first); Inter is used if installed, else Segoe UI. | Professional look without external calls. |
+| U2 | Screens: Projects (cards with live progress and attention flags), Project (Overview / Tasks / Team tabs; tab kept in the URL so voice can open "the project team" directly), Team, My work, Notifications, System status. Managers land on Projects, employees on My work. | Matches the approved preview. |
+| U3 | On-screen actions mirror the voice flows: employees Start / Report done / I'm blocked / Resume / Decline; managers Approve / Send back / Mark resolved / Assign ready tasks / Start project / Approve backlog. "Report done" requires a note or link when the task's evidence policy says so; "Assign ready tasks" always shows the plan first. | Buttons are the accessible fallback for every voice command. |
+| U4 | TanStack Query for server data; every action invalidates all queries so all screens refresh. A fresh cache per signed-in user. Each user action sends a new Idempotency-Key. | Correct, simple refresh; no cross-user data on shared devices. |
+| U5 | The voice panel is present but shows "Microphone off — voice arrives in the next phase" with a disabled button. | A visual indicator must never imply the microphone is active. |
+| U6 | Task status UNASSIGNED is shown as **Open** (assignee column says "Not assigned"). | Avoids the same words twice in a row. |
+
 ## 2026-11-20 — Phase 0 measurements (this laptop)
 
 Hardware: AMD Ryzen 3 7320U (4C/8T), ~8 GB RAM, integrated GPU (no CUDA), Windows 11 with
