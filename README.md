@@ -5,7 +5,8 @@ orchestrator assigns all eligible tasks, and employees receive and update work b
 `CLAUDE.md` is the product and engineering source of truth; `docs/decisions.md` records
 decisions and measurements.
 
-**Status:** Phase 1 (foundation) — backend + frontend + database + migrations + health checks.
+**Status:** Phase 2 — sign-in, roles, teams and permission checks on top of the Phase 1
+foundation (backend, frontend, database, migrations, health checks).
 
 ## Layout
 
@@ -27,6 +28,9 @@ cd D:\voiceflow
 .\scripts\setup-dev-db.ps1         # PostgreSQL on localhost:5433, writes backend\.env
 cd backend; .\.venv\Scripts\python.exe -m alembic upgrade head; cd ..
 cd frontend; npm install; cd ..
+
+# Optional: clearly labelled DEMO organization and accounts (passwords go to the file, never git)
+cd backend; .\.venv\Scripts\python.exe -m app.cli.seed_demo --credentials-file D:\tools\voiceflow-demo-logins.txt; cd ..
 ```
 
 Requires Python 3.11 (`py -3.11`), Node 24+, and the portable PostgreSQL in `D:\tools\pgsql`.
@@ -42,7 +46,7 @@ cd backend;  .\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000   # 
 cd frontend; npm run dev                                             # UI
 ```
 
-- UI: http://localhost:5173 (shows System status)
+- UI: http://localhost:5173 (sign in with a demo account from `D:\tools\voiceflow-demo-logins.txt`)
 - API docs: http://localhost:8000/api/docs
 - Health: `GET /api/v1/health` (process up) · Readiness: `GET /api/v1/ready` (DB + migrations)
 

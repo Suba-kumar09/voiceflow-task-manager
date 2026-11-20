@@ -36,9 +36,13 @@ def _respond(status: int, code: str, message: str, details: list[dict] | None = 
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def http_error(_: Request, exc: StarletteHTTPException):
-        code = {401: "unauthorized", 403: "forbidden", 404: "not_found"}.get(
-            exc.status_code, "http_error"
-        )
+        code = {
+            401: "unauthorized",
+            403: "forbidden",
+            404: "not_found",
+            409: "conflict",
+            429: "too_many_requests",
+        }.get(exc.status_code, "http_error")
         return _respond(exc.status_code, code, str(exc.detail))
 
     @app.exception_handler(RequestValidationError)

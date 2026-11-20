@@ -1,31 +1,49 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
+
+import { AuthProvider } from '../features/auth/AuthProvider'
+import { useAuth } from '../features/auth/auth-context'
+import { SignInPage } from '../features/auth/SignInPage'
+import { HomePage } from '../features/home/HomePage'
 import { SystemStatus } from '../features/system/SystemStatus'
-import { brand } from './brand'
+import { AppShell } from './AppShell'
+
+function Gate() {
+  const { state } = useAuth()
+
+  if (state.status === 'loading') {
+    return (
+      <div className="grid min-h-dvh place-items-center font-sans text-sm text-ink-muted" aria-live="polite">
+        Loading…
+      </div>
+    )
+  }
+  if (state.status === 'signed-out') {
+    return <SignInPage notice={state.notice} />
+  }
+  return (
+    <AppShell>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/system"
+          element={
+            <div className="flex justify-center">
+              <SystemStatus />
+            </div>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AppShell>
+  )
+}
 
 export function App() {
   return (
-    <div className="flex min-h-dvh flex-col font-sans">
-      <header className="border-b border-line bg-panel">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3 sm:px-6">
-          <div
-            aria-hidden="true"
-            className="grid size-8 place-items-center rounded-lg bg-accent text-sm font-bold text-panel"
-          >
-            {brand.name.charAt(0)}
-          </div>
-          <div>
-            <p className="text-base font-semibold leading-tight">{brand.name}</p>
-            <p className="text-xs text-ink-muted">{brand.tagline}</p>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center gap-6 px-4 py-10 sm:px-6">
-        <SystemStatus />
-        <p className="max-w-xl text-center text-sm text-ink-muted">
-          Foundation build. Voice workspaces for managers and employees are added in the next
-          phases.
-        </p>
-      </main>
-    </div>
+    <BrowserRouter>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </BrowserRouter>
   )
 }

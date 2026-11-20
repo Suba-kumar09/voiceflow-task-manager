@@ -1,4 +1,4 @@
-/** Minimal typed client for the VoiceFlow API (same-origin; Vite proxies /api in dev). */
+/** Typed client for the VoiceFlow API (same-origin; Vite proxies /api in development). */
 
 export interface ApiErrorBody {
   error: { code: string; message: string; request_id?: string }
@@ -15,6 +15,8 @@ export class ApiError extends Error {
   }
 }
 
+// ---------------------------------------------------------------- types (mirror backend schemas)
+
 export interface HealthResponse {
   status: 'ok'
 }
@@ -25,12 +27,56 @@ export interface ReadinessResponse {
   migrations: 'up_to_date' | 'pending' | 'unknown'
 }
 
-/** GET returning JSON. `acceptStatuses` lets callers treat e.g. 503 readiness as data. */
-export async function getJson<T>(path: string, acceptStatuses: number[] = []): Promise<T> {
-  const resp = await fetch(path, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-  if (resp.ok || acceptStatuses.includes(resp.status)) {
-    return (await resp.json()) as T
-  }
+export type UserRole = 'ADMIN' | 'MANAGER' | 'EMPLOYEE'
+export type MembershipRole = 'MEMBER' | 'MANAGER'
+
+export interface TeamMembership {
+  team_id: string
+  team_name: string
+  membership_role: MembershipRole
+}
+
+export interface Me {
+  id: string
+  username: string
+  display_name: string
+  role: UserRole
+  organization: { id: string; name: string; is_demo: boolean; timezone: string }
+  teams: TeamMembership[]
+  csrf_token: string
+}
+
+export interface EmployeeSummary {
+  id: string
+  display_name: string
+  role: UserRole
+  membership_role: MembershipRole
+  is_active: boolean
+}
+
+export interface Page<T> {
+  items: T[]
+  total: number
+  limit: number
+  offset: number
+}
+
+// ---------------------------------------------------------------- transport
+
+let csrfToken: string | null = null
+
+/** Remember the CSRF token for the current session (sent on every state-changing request). */
+export function setCsrfToken(token: string | null): void {
+  csrfToken = token
+}
+
+/** Called when any request finds the session gone (401), so the app can return to sign-in. */
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler
+}
+
+async function toApiError(resp: Response): Promise<ApiError> {
   let code = 'http_error'
   let message = `Request failed (${resp.status})`
   try {
@@ -40,10 +86,70 @@ export async function getJson<T>(path: string, acceptStatuses: number[] = []): P
   } catch {
     /* non-JSON error (e.g. backend not running): keep the generic message */
   }
-  throw new ApiError(resp.status, code, message)
+  return new ApiError(resp.status, code, message)
 }
+
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  body?: unknown
+  /** Status codes to treat as data rather than errors (e.g. 503 readiness). */
+  acceptStatuses?: number[]
+  /** Do not trigger the global sign-out handler on 401 (used by the sign-in call itself). */
+  ignoreUnauthorized?: boolean
+}
+
+export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const method = opts.method ?? 'GET'
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken
+
+  let resp: Response
+  try {
+    resp = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    })
+  } catch {
+    throw new ApiError(0, 'network_error', 'Cannot reach the VoiceFlow server.')
+  }
+
+  if (resp.ok || opts.acceptStatuses?.includes(resp.status)) {
+    if (resp.status === 204) return undefined as T
+    return (await resp.json()) as T
+  }
+  const err = await toApiError(resp)
+  if (resp.status === 401 && !opts.ignoreUnauthorized) onUnauthorized?.()
+  throw err
+}
+
+/** Kept for existing callers. */
+export function getJson<T>(path: string, acceptStatuses: number[] = []): Promise<T> {
+  return request<T>(path, { acceptStatuses })
+}
+
+// ---------------------------------------------------------------- endpoints
 
 export const systemApi = {
   health: () => getJson<HealthResponse>('/api/v1/health'),
   readiness: () => getJson<ReadinessResponse>('/api/v1/ready', [503]),
+}
+
+export const authApi = {
+  login: (username: string, password: string) =>
+    request<Me>('/api/v1/auth/login', {
+      method: 'POST',
+      body: { username, password },
+      ignoreUnauthorized: true,
+    }),
+  logout: () => request<void>('/api/v1/auth/logout', { method: 'POST' }),
+  /** Restore an existing session (e.g. after reload). 401 simply means "not signed in". */
+  me: () => request<Me>('/api/v1/users/me', { ignoreUnauthorized: true }),
+}
+
+export const peopleApi = {
+  teamEmployees: (teamId: string) =>
+    request<Page<EmployeeSummary>>(`/api/v1/teams/${encodeURIComponent(teamId)}/employees?limit=200`),
 }

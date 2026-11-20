@@ -32,6 +32,23 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # --- Sessions (server-side, HttpOnly cookie) ---
+    session_cookie_name: str = "vf_session"
+    session_absolute_hours: int = 12  # hard expiry after login
+    session_idle_minutes: int = 120  # expires after this long without activity
+    # Secure cookies need HTTPS; None = automatic (on in production only).
+    session_cookie_secure: bool | None = None
+
+    # --- Login throttling (per process; see docs/decisions.md) ---
+    login_max_failures: int = 5
+    login_failure_window_minutes: int = 15
+
+    @property
+    def cookie_secure(self) -> bool:
+        if self.session_cookie_secure is not None:
+            return self.session_cookie_secure
+        return self.environment == "production"
+
 
 @lru_cache
 def get_settings() -> Settings:

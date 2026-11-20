@@ -32,6 +32,19 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | E8 | Postgres is started in its own hidden console. | Sharing a terminal's console makes new backends fail with `0xC0000142` after that terminal closes. |
 | E9 | Docker Compose deferred. | Docker Desktop is installed but not running and needs ~2 GB RAM on an 8 GB laptop. Revisit for the production server. |
 
+## 2026-11-20 — Phase 2: authentication and authorization
+
+| # | Decision | Why |
+|---|---|---|
+| A1 | Passwords hashed with **argon2id** (argon2-cffi; loads under Smart App Control). Minimum 12 characters. Rehashed on login if parameters change. | Current recommended password hash. |
+| A2 | **Server-side sessions**: random 256-bit token in an HttpOnly, SameSite=Lax cookie scoped to `/api`; only its SHA-256 is stored. 12 h absolute expiry, 2 h idle expiry. `Secure` is on automatically in production. | A database leak cannot be replayed as a login; revocation is immediate. |
+| A3 | **CSRF**: per-session token returned by login and `/users/me`; required as `X-CSRF-Token` on every state-changing request. | Cookies are sent automatically, so writes need a second proof. |
+| A4 | **Login throttling**: 5 failures per username or per IP within 15 minutes → HTTP 429. Unknown usernames still pay the hashing cost, and all failures use one generic message. | Slows password guessing without revealing which usernames exist. **In-memory, single process only** — must move to PostgreSQL/Redis before running several backend processes. |
+| A5 | One role per user (`ADMIN`, `MANAGER`, `EMPLOYEE`) plus team memberships (`MEMBER` / `MANAGER`). A manager's scope is the set of teams where their membership is `MANAGER`. | Simple, explicit scope; matches CLAUDE.md section 3. |
+| A6 | All access decisions are pure functions in `app/auth/policy.py`. Another organization's data returns **404** (existence not revealed); same organization but not permitted returns **403**. Every denial is written to `audit_events`. | One auditable place for permission rules. |
+| A7 | Employees may see only their own profile; team rosters are visible to the team's managers and to administrators. | "Employees cannot access other employees' private data." Revisit if employees need a coworker directory. |
+| A8 | Demo data comes only from `python -m app.cli.seed_demo`; the organization is flagged `is_demo` and the UI shows a "Demo data" banner. Passwords are random and written to a local file outside git. | CLAUDE.md: label demo data clearly; never put credentials in the repo. |
+
 ## 2026-11-20 — Phase 0 measurements (this laptop)
 
 Hardware: AMD Ryzen 3 7320U (4C/8T), ~8 GB RAM, integrated GPU (no CUDA), Windows 11 with

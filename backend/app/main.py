@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
+from app.auth.throttle import LoginThrottle
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, request_id_var
@@ -44,6 +45,11 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["Content-Type", "X-Request-ID", "X-CSRF-Token", "Idempotency-Key"],
+    )
+
+    app.state.login_throttle = LoginThrottle(
+        max_failures=settings.login_max_failures,
+        window_seconds=settings.login_failure_window_minutes * 60,
     )
 
     register_error_handlers(app)
