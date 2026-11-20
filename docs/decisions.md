@@ -59,6 +59,20 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | T8 | Tasks use optimistic concurrency (`version`); edits must send the version they saw. Completed and cancelled tasks cannot be edited. | Prevents silently overwriting someone else's change. |
 | T9 | `projects` exists only minimally (name, team, status). Backlog import, dependencies, skills and the automatic matching/ranking policy are Phase 4. | Smallest useful slice. |
 
+## 2026-11-21 — Phase 4: projects, backlog and automatic assignment
+
+| # | Decision | Why |
+|---|---|---|
+| P1 | Project lifecycle DRAFT → READY (backlog approved) → ACTIVE (orchestrator runs). Backlog import only into an empty DRAFT project; approval re-validates the stored graph. | One controlled entry point; no half-imported backlogs. |
+| P2 | Backlog import is JSON (`{"tasks": [...]}`) with `key`, `title`, `priority` (required, never guessed), `depends_on`, `required_skills`, evidence policy, etc. Validation reports **every** problem at once: missing fields, duplicate keys, unknown or self dependencies, dependency loops (with the loop path), unknown skills. A skill nobody on the team has is a **warning** (it becomes a manager decision). A `/validate` dry run saves nothing. | Planners fix everything in one pass; nothing invented. CSV import can be layered on later. |
+| P3 | **Readiness is computed**: a task is ready when UNASSIGNED and every predecessor is COMPLETED. Manual assignment is also refused while dependencies are unmet (`dependencies_unmet`, checked before workload). | High priority never overrides an unmet dependency. |
+| P4 | **Deterministic planner** (`orchestrator/planner.py`): ready tasks ranked by priority → due date → age → key; a person qualifies with ALL required skills and spare workload; among them lowest load → fewest tasks in this project → longest since last assignment → id. People who declined a task are skipped for it. Only team MEMBERs are auto-assigned (not managers). Every decision carries a plain-language reason. | Explainable, testable, no LLM. |
+| P5 | Outcomes: ASSIGN, NO_CAPACITY (qualified people are busy — waits quietly), NO_QUALIFIED (nobody has the skill or all declined — a NEEDS_DECISION notification, sent once while unread). | The manager is interrupted only when the project cannot progress alone. |
+| P6 | The orchestrator runs on project start, on the manager's **"assign the ready tasks"** (`POST /projects/{id}/assign-ready`, with a dry-run `GET .../assignment-plan` to read back first), and automatically after a task is completed, approved, declined, unassigned or cancelled — for **every active project of that team**, because a freed person may be needed elsewhere. | Matches CLAUDE.md 4.3/4.8 and the owner's voice flow. |
+| P7 | One evaluation per project at a time (PostgreSQL advisory lock); each assignment still goes through the task service's row locks and workload check. Re-running is idempotent. Verified by a two-thread race test. | No double assignment even if triggers overlap. |
+| P8 | **Notifications** (in-app, stored): employee on assignment, approval, rejection; team managers on completion submitted (with the note), blocked, declined, needs decision, and a summary when the orchestrator assigns. Written in the same transaction as the change. Voice delivery reads these in Phase 6+. | "Employee says done → manager is told" is guaranteed by the data model, not by the UI. |
+| P9 | Not yet: pause/resume/close project, CSV import, skill management UI/API (skills are set by seed/admin helper for now). | Smallest useful slice. |
+
 ## 2026-11-20 — Phase 0 measurements (this laptop)
 
 Hardware: AMD Ryzen 3 7320U (4C/8T), ~8 GB RAM, integrated GPU (no CUDA), Windows 11 with

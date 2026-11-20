@@ -21,6 +21,7 @@ PASSWORD = "correct-horse-battery-staple"
 
 # Tables wiped between integration tests (children first is not needed with CASCADE).
 _TABLES = (
+    "notifications, task_dependencies, task_required_skills, user_skills, skills, "
     "idempotency_records, task_completion_evidence, task_status_history, task_assignments, "
     "tasks, projects, audit_events, user_sessions, team_memberships, users, teams, organizations"
 )

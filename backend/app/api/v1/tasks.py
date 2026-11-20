@@ -23,6 +23,7 @@ from app.schemas.tasks import (
     TransitionIn,
 )
 from app.services.idempotency import run_idempotent
+from app.services.orchestrator import service as orchestrator
 from app.services.tasks import service
 from app.services.tasks.lifecycle import Action
 
@@ -254,7 +255,7 @@ def _add_transition_route(path: str, action: Action, summary: str) -> None:
         body: TransitionIn | None = None,
     ):
         body = body or TransitionIn()
-        return _mutate(
+        out = _mutate(
             db,
             p,
             response,
@@ -265,6 +266,10 @@ def _add_transition_route(path: str, action: Action, summary: str) -> None:
                 db, p, task_id, action, reason=body.reason, note=body.note, link=body.link
             ),
         )
+        if action in _REEVALUATE_AFTER:
+            # The user's change is committed; now let the orchestrator assign newly ready work.
+            orchestrator.reevaluate_after_task_change(db, task_id)
+        return out
 
     endpoint.__name__ = f"task_{action.value}"
     router.add_api_route(
@@ -275,6 +280,14 @@ def _add_transition_route(path: str, action: Action, summary: str) -> None:
         summary=summary,
     )
 
+
+_REEVALUATE_AFTER = {
+    Action.REQUEST_COMPLETION,  # may complete the task (no review needed)
+    Action.APPROVE_COMPLETION,  # unlocks dependent tasks and frees the person
+    Action.DECLINE,  # task back in the pool; someone else may take it
+    Action.UNASSIGN,
+    Action.CANCEL,  # frees the person
+}
 
 for _path, _action, _summary in [
     ("publish", Action.PUBLISH, "Move a draft into the task pool"),

@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.auth.principal import Principal
@@ -27,11 +27,13 @@ from app.models import (
     AuditOutcome,
     EvidenceKind,
     EvidencePolicy,
+    NotificationKind,
     Organization,
     Project,
     Task,
     TaskAssignment,
     TaskCompletionEvidence,
+    TaskDependency,
     TaskPriority,
     TaskStatus,
     TaskStatusHistory,
@@ -47,6 +49,7 @@ from app.services.errors import (
     PermissionDeniedError,
     RuleViolationError,
 )
+from app.services.notifications import notify, notify_team_managers
 from app.services.tasks import lifecycle
 from app.services.tasks.lifecycle import Action, ActorKind, TransitionRefused
 
@@ -389,6 +392,76 @@ def _check_assignee(
     return assignee
 
 
+def unmet_dependencies(db: Session, task_id: uuid.UUID) -> list[str]:
+    """Keys/titles of predecessor tasks that are not COMPLETED yet."""
+    pred = aliased(Task)
+    rows = db.execute(
+        select(pred.external_key, pred.title)
+        .join(TaskDependency, TaskDependency.depends_on_task_id == pred.id)
+        .where(TaskDependency.task_id == task_id, pred.status != TaskStatus.COMPLETED)
+        .order_by(pred.external_key, pred.title)
+    ).all()
+    return [k or t for k, t in rows]
+
+
+def _require_dependencies_met(db: Session, task: Task) -> None:
+    """Checked before anything else: no one may start work whose predecessors are unfinished."""
+    waiting_on = unmet_dependencies(db, task.id)
+    if waiting_on:
+        raise RuleViolationError(
+            "This task cannot be assigned yet. It is waiting on: " + ", ".join(waiting_on) + ".",
+            code="dependencies_unmet",
+        )
+
+
+def _apply_assignment(
+    db: Session,
+    task: Task,
+    assignee: User,
+    *,
+    source: AssignmentSource,
+    actor: Principal | None,
+    details: dict,
+) -> None:
+    """The single place a task becomes ASSIGNED (manual and orchestrator paths).
+    Callers must run _require_dependencies_met and _check_assignee first."""
+    previous = task.status
+    task.status = TaskStatus.ASSIGNED
+    task.assigned_to = assignee.id
+    db.add(
+        TaskAssignment(
+            task_id=task.id,
+            assignee_id=assignee.id,
+            source=source,
+            assigned_by=actor.user_id if actor else None,
+        )
+    )
+    _flush(db)
+    full = {"assignee_id": str(assignee.id), "source": source.value, **details}
+    _history(
+        db,
+        task,
+        action=Action.ASSIGN.value,
+        from_status=previous,
+        actor_user_id=actor.user_id if actor else None,
+        details=full,
+    )
+    _audit(db, actor, task, Action.ASSIGN.value, full)
+    by = "your manager" if actor else "VoiceFlow"
+    notify(
+        db,
+        organization_id=task.organization_id,
+        recipient_id=assignee.id,
+        kind=NotificationKind.TASK_ASSIGNED,
+        title=f"New task: {task.title}",
+        body=f"Assigned by {by}. {task.priority.value.capitalize()} priority."
+        + (f" {details['reason']}" if details.get("reason") else ""),
+        task_id=task.id,
+        project_id=task.project_id,
+    )
+    _flush(db)
+
+
 def assign_task(
     db: Session,
     p: Principal,
@@ -397,42 +470,53 @@ def assign_task(
     *,
     override_capacity: bool = False,
 ) -> Task:
-    """Manual assignment (exception path). The orchestrator will use the same core in Phase 4."""
+    """Manual assignment by a manager (the exception path)."""
     task = _load_task(db, p, task_id, lock=True)
     try:
         lifecycle.check(Action.ASSIGN, task.status, actor_kinds(p, task), None)
     except TransitionRefused as exc:
         _raise_refusal(db, p, task, Action.ASSIGN, exc)
 
+    _require_dependencies_met(db, task)
     assignee = _check_assignee(db, task, assignee_id, override_capacity=override_capacity)
-    previous = task.status
-    task.status = TaskStatus.ASSIGNED
-    task.assigned_to = assignee.id
-    db.add(
-        TaskAssignment(
-            task_id=task.id,
-            assignee_id=assignee.id,
-            source=AssignmentSource.MANUAL,
-            assigned_by=p.user_id,
-        )
-    )
-    _flush(db)
-    _history(
+    _apply_assignment(
         db,
         task,
-        action=Action.ASSIGN.value,
-        from_status=previous,
-        actor_user_id=p.user_id,
-        details={"assignee_id": str(assignee.id), "override_capacity": override_capacity},
+        assignee,
+        source=AssignmentSource.MANUAL,
+        actor=p,
+        details={"override_capacity": override_capacity},
     )
-    _audit(
+    return task
+
+
+def system_assign(
+    db: Session,
+    task_id: uuid.UUID,
+    assignee_id: uuid.UUID,
+    *,
+    reason: str,
+    requested_by: Principal | None = None,
+) -> Task:
+    """Orchestrator assignment. Re-checks everything under row locks; never overrides capacity."""
+    task = db.execute(select(Task).where(Task.id == task_id).with_for_update()).scalar_one()
+    try:
+        lifecycle.check(Action.ASSIGN, task.status, {ActorKind.SYSTEM}, None)
+    except TransitionRefused as exc:
+        raise ConflictError(exc.message, code=exc.code) from exc
+    _require_dependencies_met(db, task)
+    assignee = _check_assignee(db, task, assignee_id, override_capacity=False)
+    _apply_assignment(
         db,
-        p,
         task,
-        Action.ASSIGN.value,
-        {"assignee_id": str(assignee.id), "override_capacity": override_capacity},
+        assignee,
+        source=AssignmentSource.ORCHESTRATOR,
+        actor=None,
+        details={
+            "reason": reason,
+            **({"requested_by": str(requested_by.user_id)} if requested_by else {}),
+        },
     )
-    _flush(db)
     return task
 
 
@@ -586,9 +670,102 @@ def transition(
         details=details,
     )
     _audit(db, p, task, action.value, {"from": previous.value, "to": task.status.value, **details})
+    _notify_for_transition(
+        db,
+        p,
+        task,
+        action,
+        previous_assignee=details.get("previous_assignee_id"),
+        reason=reason,
+        note=note,
+    )
     _flush(db)
-    # Phase 4: after commit, a COMPLETED task triggers project re-evaluation by the orchestrator.
+    # After commit, the API asks the orchestrator to re-evaluate the project (see api/v1/tasks).
     return task
+
+
+def _person_name(db: Session, user_id: uuid.UUID | None) -> str:
+    if user_id is None:
+        return "Someone"
+    user = db.get(User, user_id)
+    return user.display_name if user else "Someone"
+
+
+def _notify_for_transition(
+    db: Session,
+    p: Principal,
+    task: Task,
+    action: Action,
+    *,
+    previous_assignee: str | None,
+    reason: str | None,
+    note: str | None,
+) -> None:
+    """Tell the right people about a change, in the same transaction as the change."""
+    who = _person_name(db, p.user_id)
+    common = {
+        "organization_id": task.organization_id,
+        "task_id": task.id,
+        "project_id": task.project_id,
+    }
+    if action is Action.REQUEST_COMPLETION:
+        if task.status is TaskStatus.PENDING_REVIEW:
+            body = "Waiting for your review."
+            if note and note.strip():
+                body = f"Their note: “{note.strip()}” " + body
+            notify_team_managers(
+                db,
+                team_id=task.team_id,
+                kind=NotificationKind.COMPLETION_SUBMITTED,
+                title=f"{who} completed {task.title}",
+                body=body,
+                **common,
+            )
+        else:
+            notify_team_managers(
+                db,
+                team_id=task.team_id,
+                kind=NotificationKind.COMPLETION_SUBMITTED,
+                title=f"{who} completed {task.title}",
+                body="No review was required; the task is completed.",
+                **common,
+            )
+    elif action is Action.APPROVE_COMPLETION and task.assigned_to:
+        notify(
+            db,
+            recipient_id=task.assigned_to,
+            kind=NotificationKind.COMPLETION_APPROVED,
+            title=f"{who} approved {task.title}",
+            body="The task is now completed.",
+            **common,
+        )
+    elif action is Action.REJECT_COMPLETION and task.assigned_to:
+        notify(
+            db,
+            recipient_id=task.assigned_to,
+            kind=NotificationKind.COMPLETION_REJECTED,
+            title=f"{task.title} needs more work",
+            body=f"{who}: “{reason}”",
+            **common,
+        )
+    elif action is Action.BLOCK:
+        notify_team_managers(
+            db,
+            team_id=task.team_id,
+            kind=NotificationKind.TASK_BLOCKED,
+            title=f"{task.title} is blocked",
+            body=f"{who}: “{reason}”",
+            **common,
+        )
+    elif action is Action.DECLINE:
+        notify_team_managers(
+            db,
+            team_id=task.team_id,
+            kind=NotificationKind.TASK_DECLINED,
+            title=f"{who} declined {task.title}",
+            body=f"Reason: “{reason}”. The task is back in the pool.",
+            **common,
+        )
 
 
 def _record_evidence(

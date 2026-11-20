@@ -113,6 +113,10 @@ class Project(Base):
     )
     created_by: Mapped[uuid.UUID] = _uuid_fk("users.id", nullable=False)
     created_at: Mapped[datetime] = created_at_col()
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    backlog_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    backlog_approved_by: Mapped[uuid.UUID | None] = _uuid_fk("users.id", nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Task(Base):

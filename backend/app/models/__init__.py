@@ -10,6 +10,14 @@ from app.models.identity import (
     UserRole,
     UserSession,
 )
+from app.models.planning import (
+    Notification,
+    NotificationKind,
+    Skill,
+    TaskDependency,
+    TaskRequiredSkill,
+    UserSkill,
+)
 from app.models.tasks import (
     ACTIVE_HOLD_STATUSES,
     AssignmentEndReason,
@@ -28,6 +36,12 @@ from app.models.tasks import (
 )
 
 __all__ = [
+    "Notification",
+    "NotificationKind",
+    "Skill",
+    "TaskDependency",
+    "TaskRequiredSkill",
+    "UserSkill",
     "ACTIVE_HOLD_STATUSES",
     "AssignmentEndReason",
     "AssignmentSource",
