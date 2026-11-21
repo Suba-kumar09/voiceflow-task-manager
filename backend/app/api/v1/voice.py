@@ -1,6 +1,7 @@
-"""Voice turns: audio (or typed text) -> transcript -> intent -> action + spoken reply.
+"""Voice turns: audio (or typed text) -> transcript -> harness -> spoken reply.
 
-Phase 6: navigation and read-only questions only. Nothing here changes tasks.
+Navigation and questions are answered directly. Changes go through the execution harness:
+resolved from permitted data, checked, read back, and executed only after "yes".
 """
 
 import logging
@@ -13,13 +14,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app.agent.harness import TurnRecord, run_turn
 from app.agent.intents import Intent
-from app.agent.voice_turn import TurnResult, safe_handle_text
-from app.auth.principal import MutatingPrincipal, Principal
+from app.agent.voice_turn import TurnResult
+from app.auth.principal import CurrentPrincipal, MutatingPrincipal, Principal
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.models import TeamMembership, User
+from app.models import AgentTrace, TeamMembership, User
 from app.services import projects as project_svc
+from app.services.errors import PermissionDeniedError
 from app.voice.audio import validate_wav
 from app.voice.stt import SpeechToTextProvider, get_stt_provider
 
@@ -40,16 +43,26 @@ class VoiceTurnOut(BaseModel):
     heard_clearly: bool
     intent: str
     slots: dict
-    outcome: str
+    outcome: str  # ok | confirm | clarify | done | denied | failed | repeat | unsupported | not_yet
     speech: str
     action: dict | None
     suggestions: list[str]
+    checks: list[dict]
+    plan: list[dict]
+    awaiting_confirmation: bool
+    trace_id: str | None
     stt_ms: int | None
     total_ms: int
 
 
 def _out(
-    r: TurnResult, *, transcript: str | None, clear: bool, stt_ms: int | None, t0: float
+    r: TurnResult,
+    *,
+    transcript: str | None,
+    clear: bool,
+    stt_ms: int | None,
+    t0: float,
+    trace_id=None,
 ) -> VoiceTurnOut:
     out = VoiceTurnOut(
         transcript=transcript,
@@ -60,6 +73,10 @@ def _out(
         speech=r.speech,
         action=r.action,
         suggestions=r.suggestions,
+        checks=r.checks,
+        plan=r.plan,
+        awaiting_confirmation=r.awaiting_confirmation,
+        trace_id=str(trace_id) if trace_id else None,
         stt_ms=stt_ms,
         total_ms=int((time.perf_counter() - t0) * 1000),
     )
@@ -96,12 +113,16 @@ def _hints(db: Session, p: Principal) -> list[str]:
     return sorted(names)[:40]
 
 
+def _from_record(rec: TurnRecord, **kw) -> VoiceTurnOut:
+    return _out(rec.result, trace_id=rec.trace_id, **kw)
+
+
 @router.post("/turns", response_model=VoiceTurnOut)
 def text_turn(body: TextTurnIn, p: MutatingPrincipal, db: DB) -> VoiceTurnOut:
-    """Typed fallback (and test entry point): same pipeline without speech recognition."""
+    """Typed fallback (and test entry point): same harness without speech recognition."""
     t0 = time.perf_counter()
-    result = safe_handle_text(db, p, body.text, path=body.path, page_summary=body.page_summary)
-    return _out(result, transcript=body.text, clear=True, stt_ms=None, t0=t0)
+    rec = run_turn(db, p, body.text, path=body.path, page_summary=body.page_summary, channel="text")
+    return _from_record(rec, transcript=body.text, clear=True, stt_ms=None, t0=t0)
 
 
 @router.post(
@@ -128,6 +149,7 @@ async def audio_turn(
     hints = await run_in_threadpool(_hints, db, p)
     transcript = await run_in_threadpool(stt.transcribe, clip.wav_bytes, hints=hints)
     if not transcript.confident:
+        # Never act on unclear speech — not even a "yes".
         result = TurnResult(
             Intent("unclear"), "repeat", "Sorry, I didn't catch that clearly. Please say it again."
         )
@@ -138,7 +160,52 @@ async def audio_turn(
             stt_ms=transcript.latency_ms,
             t0=t0,
         )
-    result = await run_in_threadpool(
-        lambda: safe_handle_text(db, p, transcript.text, path=path, page_summary=page_summary)
+    rec = await run_in_threadpool(
+        lambda: run_turn(
+            db,
+            p,
+            transcript.text,
+            path=path,
+            page_summary=page_summary,
+            channel="voice",
+            stt_ms=transcript.latency_ms,
+        )
     )
-    return _out(result, transcript=transcript.text, clear=True, stt_ms=transcript.latency_ms, t0=t0)
+    return _from_record(
+        rec, transcript=transcript.text, clear=True, stt_ms=transcript.latency_ms, t0=t0
+    )
+
+
+@router.get("/traces", tags=["voice"])
+def list_traces(
+    p: CurrentPrincipal, db: DB, limit: Annotated[int, Query(ge=1, le=200)] = 50
+) -> list[dict]:
+    """Administrators only: how recent voice turns were understood and handled."""
+    if not p.is_admin:
+        raise PermissionDeniedError("Only administrators can view agent traces.")
+    rows = db.execute(
+        select(AgentTrace, User.display_name)
+        .join(User, User.id == AgentTrace.user_id)
+        .where(AgentTrace.organization_id == p.organization_id)
+        .order_by(AgentTrace.created_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "id": str(t.id),
+            "at": t.created_at.isoformat(),
+            "user": name,
+            "channel": t.channel,
+            "transcript": t.transcript,
+            "intent": t.intent,
+            "slots": t.slots,
+            "tool": t.tool,
+            "outcome": t.outcome,
+            "steps": t.steps,
+            "speech": t.speech,
+            "error": t.error,
+            "stt_ms": t.stt_ms,
+            "total_ms": t.total_ms,
+        }
+        for t, name in rows
+    ]

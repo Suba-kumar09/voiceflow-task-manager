@@ -359,12 +359,30 @@ export interface VoiceTurn {
   heard_clearly: boolean
   intent: string
   slots: Record<string, string>
-  outcome: 'ok' | 'clarify' | 'repeat' | 'unsupported' | 'not_yet' | 'denied'
+  outcome: 'ok' | 'confirm' | 'done' | 'clarify' | 'repeat' | 'unsupported' | 'not_yet' | 'denied' | 'failed'
   speech: string
   action: { type: 'navigate'; to: string } | { type: 'back' } | { type: 'stop' } | { type: 'repeat' } | null
   suggestions: string[]
+  checks: VoiceCheck[]
+  plan: VoicePlanRow[]
+  awaiting_confirmation: boolean
+  trace_id: string | null
   stt_ms: number | null
   total_ms: number
+}
+
+export interface VoiceCheck {
+  text: string
+  state: 'ok' | 'warn' | 'fail'
+}
+
+export interface VoicePlanRow {
+  key: string
+  title: string
+  priority: TaskPriority
+  outcome: 'ASSIGN' | 'NO_CAPACITY' | 'NO_QUALIFIED'
+  assignee: string | null
+  reason: string
 }
 
 export interface VoiceContext {

@@ -1,8 +1,9 @@
 """Deterministic intent parser for spoken commands (no LLM). Pure and fully testable.
 
-Phase 6 covers navigation and read-only questions. Phrases that would CHANGE data are
-recognised as `change.not_yet` so the assistant can say so honestly (Phase 7 adds them with
-confirmation through the execution harness).
+Navigation and read-only questions are answered directly. Commands that CHANGE data become
+`task.*` / `project.*` intents with slots; the execution harness resolves them against the
+database, asks for anything missing, reads them back and waits for "yes" before acting.
+Unsupported changes (deadline extensions, declining) remain `change.not_yet`.
 """
 
 import re
@@ -38,6 +39,7 @@ def normalize(text: str) -> str:
     t = t.replace("’", "'").replace("e commerce", "ecommerce").replace("e-commerce", "ecommerce")
     t = re.sub(r"[^\w\s']", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"\ba signed\b", "assign", t)  # common mishearing of "assign"
     t = _FILLER.sub("", t)
     t = _TRAILING.sub("", t).strip()
     return t
@@ -45,6 +47,111 @@ def normalize(text: str) -> str:
 
 def _m(pattern: str, text: str) -> re.Match | None:
     return re.fullmatch(pattern, text)
+
+
+_PRONOUN = {
+    "",
+    "it",
+    "this",
+    "that",
+    "my task",
+    "the task",
+    "this task",
+    "that task",
+    "task",
+    "my work",
+    "work",
+}
+
+
+def _task_hint(s: str | None) -> str:
+    """'the product listing page task' -> 'product listing page'; pronouns -> ''."""
+    s = (s or "").strip()
+    s = re.sub(r"^(?:the|my|our)\s+", "", s)
+    s = re.sub(r"\s+task$", "", s).strip()
+    return "" if s in _PRONOUN else s
+
+
+def _raw_after(raw: str, words: str) -> str | None:
+    """Text after 'because' / 'note' in the ORIGINAL words (keeps capitals and punctuation)."""
+    m = re.search(rf"\b(?:{words})\b[\s:,-]*(.+)$", raw, flags=re.IGNORECASE | re.DOTALL)
+    return m.group(1).strip().rstrip(".") if m and m.group(1).strip() else None
+
+
+def _change_intent(t: str, raw: str) -> Intent | None:
+    """Commands that change data. Returns None if `t` is not one."""
+    if _m(
+        r"(?:(?:yes|yeah|yep|please|sure|okay|ok|go ahead|do it|confirm|confirmed|correct|that's right|right)\s*)+",
+        t,
+    ):
+        return Intent("confirm.yes")
+    if _m(r"(?:(?:no|nope|no thanks|don't|do not|wait|not now|not|don't do it)\s*)+", t):
+        return Intent("confirm.no")
+
+    note = _raw_after(raw, r"note|notes|with the note|with a note|note is")
+    reason = _raw_after(raw, r"because|since|reason is|due to")
+    body = re.split(
+        r"\b(?:because|since|reason is|due to|note|notes|with the note|with a note)\b", t
+    )[0].strip()
+
+    # Employee: completion
+    if m := _m(
+        r"(?:i(?:'ve| have)? (?:completed|finished)|i(?:'m| am) (?:done|finished) with|i(?:'m| am) done|i finished|"
+        r"(?:mark|set) )(.*?)(?: as (?:done|complete|completed))?(?: is (?:done|complete))?",
+        body,
+    ):
+        slots = {"task": _task_hint(m.group(1))}
+        if note:
+            slots["note"] = note
+        return Intent("task.complete", slots)
+    if m := _m(r"(.+?) is (?:done|complete|completed|finished)", body):
+        return Intent(
+            "task.complete", {"task": _task_hint(m.group(1)), **({"note": note} if note else {})}
+        )
+
+    # Employee: blocker / resume / start
+    if m := _m(r"(?:i(?:'m| am) (?:blocked|stuck)(?: on| with)?|(.+?) is blocked)(.*)", body):
+        slots = {"task": _task_hint(m.group(1) or m.group(2))}
+        if reason:
+            slots["reason"] = reason
+        return Intent("task.block", slots)
+    if m := _m(
+        r"(?:i(?:'m| am) (?:unblocked|back on)|(?:resume|resuming|continue|continuing)(?: work(?: on)?)?|the blocker is (?:fixed|resolved|gone))(.*)",
+        body,
+    ):
+        return Intent("task.resume", {"task": _task_hint(m.group(1))})
+
+    # Manager: approve / reject
+    if m := _m(r"(?:approve|accept the work on|accept)(.*)", body):
+        return Intent("task.approve", {"task": _task_hint(m.group(1))})
+    if m := _m(r"(?:reject|send back|send it back|send that back|send this back)(.*)", body):
+        slots = {"task": _task_hint(re.sub(r"^\s*(?:it|that|this)?\s*back\b", "", m.group(1)))}
+        if reason:
+            slots["reason"] = reason
+        return Intent("task.reject", slots)
+
+    # Manager: assign ready tasks / start project / manual assignment
+    if m := _m(
+        r"assign (?:all )?(?:the )?(?:ready|pending|open|remaining) tasks(?: by priority)?(?: (?:in|for|on) (?:the )?(.+?)(?: project)?)?(?: by priority)?",
+        body,
+    ):
+        return Intent("project.assign_ready", {"project": m.group(1)} if m.group(1) else {})
+    if m := _m(r"(?:start|launch|kick off|begin) (?:the )?(.+?) project", body):
+        return Intent("project.start", {"project": m.group(1)})
+    if m := _m(r"(?:assign|give) (?:the )?(.+?) to (.+)", body):
+        return Intent("task.assign", {"task": _task_hint(m.group(1)), "person": m.group(2).strip()})
+
+    # Employee: start work (after "start ... project")
+    if m := _m(
+        r"(?:i(?:'ve| have)? started|i(?:'m| am) starting|start|starting|begin|i'll start)(?: working on| work on)?(.*)",
+        body,
+    ):
+        return Intent("task.start", {"task": _task_hint(m.group(1))})
+
+    # Recognised but not supported by voice yet
+    if re.search(r"\b(?:decline|extend|extension|more time|reassign|cancel (?:the )?task)\b", t):
+        return Intent("change.not_yet", {"utterance": t})
+    return None
 
 
 def parse(text: str) -> Intent:
@@ -60,16 +167,9 @@ def parse(text: str) -> Intent:
     if _m(r"(?:help|what can i say|what can you do|commands)", t):
         return Intent("help")
 
-    # --- things that change data: recognised, but not available by voice yet ------
-    if re.search(
-        r"\b(?:i(?:'ve| have)? (?:completed|finished|done)|i am done|i'm done|mark (?:it |this )?"
-        r"(?:as )?(?:done|complete)|approve|reject|assign|reassign|a signed|"  # "a signed" = misheard "assign"
-        r"i'm blocked|i am blocked|"
-        r"blocked|start (?:the |my )?(?:task|project|work)|decline|cancel (?:the )?task|"
-        r"extend|extension|more time)\b",
-        t,
-    ):
-        return Intent("change.not_yet", {"utterance": t})
+    # --- things that change data (executed only through the harness, after "yes") ---
+    if change := _change_intent(t, text):
+        return change
 
     # --- read-only questions --------------------------------------------------------
     if _m(

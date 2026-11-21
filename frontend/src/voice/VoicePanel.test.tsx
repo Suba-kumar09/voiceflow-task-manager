@@ -44,6 +44,10 @@ function turn(overrides: Partial<VoiceTurn>): VoiceTurn {
     speech: '',
     action: null,
     suggestions: [],
+    checks: [],
+    plan: [],
+    awaiting_confirmation: false,
+    trace_id: null,
     stt_ms: null,
     total_ms: 5,
     ...overrides,
@@ -110,6 +114,48 @@ describe('voice panel', () => {
     await user.click(screen.getByRole('button', { name: '“What is still pending?”' }))
     expect(await screen.findByText('You can say: open the E-Commerce project.')).toBeInTheDocument()
     expect(spoken).toEqual([])
+  })
+
+  it('reads a change back with checks and a plan, and only acts after Yes', async () => {
+    const said: string[] = []
+    const { calls } = mockApi(
+      routes((body) => {
+        said.push(body.text)
+        if (body.text === 'yes') {
+          return turn({ intent: 'confirm.yes', outcome: 'done', speech: 'Done. I assigned Wishlist page to Priya.' })
+        }
+        return turn({
+          intent: 'project.assign_ready',
+          outcome: 'confirm',
+          awaiting_confirmation: true,
+          speech: 'By priority: Wishlist page to Priya. Shall I assign 1 task?',
+          checks: [{ text: '2 tasks are ready (dependencies done)', state: 'ok' }],
+          plan: [
+            { key: 'EC10', title: 'Wishlist page', priority: 'HIGH', outcome: 'ASSIGN', assignee: 'Priya', reason: '' },
+            { key: 'EC11', title: 'iOS build setup', priority: 'MEDIUM', outcome: 'NO_QUALIFIED', assignee: null, reason: '' },
+          ],
+        })
+      }),
+    )
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Projects' })
+    await user.click(screen.getByRole('button', { name: '“Assign the ready tasks by priority”' }))
+
+    const panel = screen.getByRole('region', { name: 'Voice assistant' })
+    expect(await within(panel).findByRole('list', { name: 'Checks' })).toHaveTextContent('2 tasks are ready')
+    const plan = within(panel).getByRole('list', { name: 'Assignment plan' })
+    expect(plan).toHaveTextContent('Priya')
+    expect(plan).toHaveTextContent('Needs your decision')
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('Waiting for your yes'))
+    expect(said).toEqual(['Assign the ready tasks by priority']) // nothing confirmed yet
+
+    const tasksFetchesBefore = calls.filter((c) => c.key.startsWith('GET /api/v1/projects')).length
+    await user.click(within(panel).getByRole('button', { name: 'Yes, do it' }))
+    expect(await within(panel).findByText('Done. I assigned Wishlist page to Priya.')).toBeInTheDocument()
+    expect(said).toEqual(['Assign the ready tasks by priority', 'yes'])
+    expect(within(panel).queryByRole('button', { name: 'Yes, do it' })).not.toBeInTheDocument()
+    await waitFor(() => expect(calls.filter((c) => c.key.startsWith('GET /api/v1/projects')).length).toBeGreaterThan(tasksFetchesBefore))
   })
 
   it('never pretends to listen when there is no microphone', async () => {

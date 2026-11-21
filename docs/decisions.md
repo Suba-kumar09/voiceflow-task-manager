@@ -84,6 +84,18 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | U5 | The voice panel is present but shows "Microphone off — voice arrives in the next phase" with a disabled button. | A visual indicator must never imply the microphone is active. |
 | U6 | Task status UNASSIGNED is shown as **Open** (assignee column says "Not assigned"). | Avoids the same words twice in a row. |
 
+## 2026-11-21 — Phase 7: voice commands that change data (execution harness)
+
+| # | Decision | Why |
+|---|---|---|
+| H1 | Every change by voice goes through `app/agent/harness.py`: understand (rules) → resolve the task/person/project **only from the caller's permitted data** → visible checks → ask for anything missing (note, reason) → read back "Shall I …?" → execute **only after "yes"**. | CLAUDE.md 8.1/8.2: the LLM/agent never changes data directly; confirmation for consequential actions. |
+| H2 | Pending actions (`agent_pending_actions`) belong to one user, expire after **2 minutes**, are row-locked and **single use**; a new request supersedes an older one; "no"/"cancel" discards it. A second "yes", someone else's "yes" or an expired one does nothing. | No accidental or repeated execution. |
+| H3 | Execution calls the same services as the on-screen buttons, which re-check identity, permissions, lifecycle, workload and dependencies at that moment. If anything changed since the read-back, the harness says "I couldn't do that: … Nothing was changed." | Stored arguments are never trusted on their own. |
+| H4 | Voice commands: employee — started, completed (asks for the note when required; links must be added on screen), blocked (asks for the reason), unblocked; manager — approve, send back (asks for the reason), assign the ready tasks by priority (plan read back), assign a task to a named person, start a project. Manager commands are refused for employees. Deadline extensions and declining stay "not by voice yet". | The owner's two key flows, plus the obvious companions. |
+| H5 | Ambiguity is never guessed: no hint + several candidates, several matches, or no match → a clarifying question with the real options. Pronouns ("it", "my task") use the single candidate, preferring the project on screen. | CLAUDE.md: never guess names or tasks. |
+| H6 | `agent_traces` records every turn: transcript, intent, slots, tool, outcome, steps (understood → pending_found / proposed / slot_filled / executed / stopped), reply and timings. Readable only by administrators (`GET /voice/traces`). Audit events are still written by the services. | Traces explain how; audit records what changed. |
+| H7 | The voice panel shows the checks, the assignment plan and **Yes, do it / Cancel** while waiting; all screens refresh after a change. Verified with the real model: 5/5 spoken change commands recognised and parsed correctly (~1.1 s each). | Voice-first, with an accessible on-screen fallback. |
+
 ## 2026-11-21 — Phase 6: voice foundation
 
 | # | Decision | Why |

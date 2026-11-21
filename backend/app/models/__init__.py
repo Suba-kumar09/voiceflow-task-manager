@@ -1,5 +1,6 @@
 """ORM models. Import every model here so Alembic sees the full metadata."""
 
+from app.models.agent import AgentPendingAction, AgentTrace
 from app.models.audit import AuditEvent, AuditOutcome
 from app.models.identity import (
     MembershipRole,
@@ -36,6 +37,8 @@ from app.models.tasks import (
 )
 
 __all__ = [
+    "AgentPendingAction",
+    "AgentTrace",
     "Notification",
     "NotificationKind",
     "Skill",

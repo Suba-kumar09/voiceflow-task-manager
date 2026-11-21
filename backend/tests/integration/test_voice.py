@@ -128,10 +128,11 @@ def test_read_this_page_speaks_the_screen_summary(as_user, skilled_world):  # no
     assert r["speech"] == "Projects. 1 active project."
 
 
-def test_change_commands_do_not_change_anything_yet(as_user, skilled_world, db):  # noqa: F811
-    _, project, _ = started_project(as_user, skilled_world)
+def test_completing_work_that_was_never_started_is_refused_with_a_hint(as_user, skilled_world, db):  # noqa: F811
+    started_project(as_user, skilled_world)
     r = say(as_user("emp_web_1"), "I've completed the database schema")
-    assert r["outcome"] == "not_yet" and r["action"] is None
+    assert r["outcome"] == "clarify" and r["awaiting_confirmation"] is False
+    assert "not started yet" in r["speech"] and "I've started" in r["speech"]
     t1 = db.execute(select(Task).where(Task.external_key == "T1")).scalar_one()
     assert t1.status is TaskStatus.ASSIGNED
 

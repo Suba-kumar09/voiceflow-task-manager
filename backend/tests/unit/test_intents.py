@@ -50,19 +50,72 @@ def test_parse(said, name, slots):
 
 
 @pytest.mark.parametrize(
-    "said",
+    ("said", "name", "slots"),
     [
-        "I've completed the product listing page",
-        "I have finished website testing",
-        "approve it",
-        "assign the ready tasks by priority",
-        "A signed website testing to Subashini",  # STT error for "Assign" is still a change
-        "I'm blocked because the API is down",
-        "I need more time",
+        # employee
+        (
+            "I've completed the product listing page",
+            "task.complete",
+            {"task": "product listing page"},
+        ),
+        ("I have finished website testing.", "task.complete", {"task": "website testing"}),
+        ("I'm done", "task.complete", {"task": ""}),
+        (
+            "I've completed the product listing page, note: All products show price, stock and images.",
+            "task.complete",
+            {"task": "product listing page", "note": "All products show price, stock and images"},
+        ),
+        ("Mark the wishlist page as done", "task.complete", {"task": "wishlist page"}),
+        ("The catalog API is done", "task.complete", {"task": "catalog api"}),
+        (
+            "I'm blocked because the Payment Sandbox is down.",
+            "task.block",
+            {"task": "", "reason": "the Payment Sandbox is down"},
+        ),
+        ("I'm stuck on the cart API", "task.block", {"task": "cart api"}),
+        ("I'm unblocked", "task.resume", {"task": ""}),
+        ("I've started the database schema", "task.start", {"task": "database schema"}),
+        ("start my task", "task.start", {"task": ""}),
+        # manager
+        ("Approve it", "task.approve", {"task": ""}),
+        ("approve the UI design mockups", "task.approve", {"task": "ui design mockups"}),
+        (
+            "Send it back because the tests are failing",
+            "task.reject",
+            {"task": "", "reason": "the tests are failing"},
+        ),
+        ("Assign the ready tasks by priority", "project.assign_ready", {}),
+        ("a signed the ready tasks", "project.assign_ready", {}),  # misheard "assign"
+        (
+            "assign the ready tasks in the e-commerce project",
+            "project.assign_ready",
+            {"project": "ecommerce"},
+        ),
+        ("Start the HR portal project", "project.start", {"project": "hr portal"}),
+        (
+            "A signed website testing to Subashini",
+            "task.assign",
+            {"task": "website testing", "person": "subashini"},
+        ),
+        (
+            "give the wishlist page to Priya",
+            "task.assign",
+            {"task": "wishlist page", "person": "priya"},
+        ),
+        # confirmation
+        ("Yes", "confirm.yes", {}),
+        ("yes please, go ahead", "confirm.yes", {}),
+        ("Okay, do it.", "confirm.yes", {}),
+        ("no, not now", "confirm.no", {}),
+        ("go ahead", "confirm.yes", {}),
+        ("No", "confirm.no", {}),
+        # still unsupported by voice
+        ("I need more time", "change.not_yet", {"utterance": "i need more time"}),
     ],
 )
-def test_changes_are_recognised_but_not_executed_yet(said):
-    assert parse(said).name == "change.not_yet"
+def test_change_commands_and_slots(said, name, slots):
+    intent = parse(said)
+    assert (intent.name, intent.slots) == (name, slots), said
 
 
 def test_nonsense_is_unknown_not_guessed():

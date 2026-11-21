@@ -31,6 +31,10 @@ class TurnResult:
     speech: str
     action: dict | None = None
     suggestions: list[str] = field(default_factory=list)
+    checks: list[dict] = field(default_factory=list)  # [{"text", "state": ok|warn|fail}]
+    plan: list[dict] = field(default_factory=list)  # assignment plan read back to a manager
+    awaiting_confirmation: bool = False
+    tool: str | None = None
 
 
 def _compact(s: str) -> str:

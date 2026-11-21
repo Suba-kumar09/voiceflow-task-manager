@@ -57,3 +57,5 @@ known-third-party = ["alembic"]
 "tests/**" = ["S101", "S105", "S106", "S311"]  # asserts, fixed test credentials, shuffling
 "alembic/versions/*" = ["E501"]  # generated migrations contain long SQL literals
 "app/agent/intents.py" = ["E501"]  # spoken-command patterns are clearer unsplit
+"app/agent/harness.py" = ["E501"]  # spoken sentence templates are clearer unsplit
+"tests/unit/test_intents.py" = ["E501"]  # spoken test phrases

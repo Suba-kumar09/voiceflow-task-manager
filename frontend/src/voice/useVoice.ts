@@ -3,7 +3,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { useLocation, useNavigate } from 'react-router'
 
 import { errorMessage } from '../components/ui/errorMessage'
-import { voiceApi, type VoiceTurn } from '../services/api'
+import { voiceApi, type VoiceCheck, type VoicePlanRow, type VoiceTurn } from '../services/api'
 import { PageSummaryContext } from './pageSummary'
 import { MicRecorder, MicrophoneError } from './recorder'
 import { BrowserSpeech, type TextToSpeech } from './tts'
@@ -14,6 +14,7 @@ export type VoicePhase =
   | 'understanding'
   | 'speaking'
   | 'attention' // need clarification / repeat / not allowed
+  | 'confirm' // a change is read back and waits for "yes"
   | 'error'
   | 'muted'
   | 'unavailable' // no microphone or permission refused
@@ -35,6 +36,9 @@ export function useVoice(tts: TextToSpeech = defaultSpeech) {
   const [captions, setCaptions] = useState<Captions>({})
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [problem, setProblem] = useState<string | null>(null)
+  const [checks, setChecks] = useState<VoiceCheck[]>([])
+  const [plan, setPlan] = useState<VoicePlanRow[]>([])
+  const [awaiting, setAwaiting] = useState(false)
   const recorder = useRef<MicRecorder | null>(null)
   const lastSpeech = useRef('')
 
@@ -63,6 +67,9 @@ export function useVoice(tts: TextToSpeech = defaultSpeech) {
     async (turn: VoiceTurn) => {
       setCaptions({ you: turn.transcript ?? undefined, bot: turn.speech || undefined })
       setSuggestions(turn.suggestions)
+      setChecks(turn.checks ?? [])
+      setPlan(turn.plan ?? [])
+      setAwaiting(turn.awaiting_confirmation)
       const a = turn.action
       if (a?.type === 'navigate') navigate(a.to)
       else if (a?.type === 'back') navigate(-1)
@@ -75,8 +82,11 @@ export function useVoice(tts: TextToSpeech = defaultSpeech) {
         await say(lastSpeech.current, 'ready')
         return
       }
-      if (turn.intent.startsWith('query.') || a?.type === 'navigate') void qc.invalidateQueries()
-      await say(turn.speech, turn.outcome === 'ok' ? 'ready' : 'attention')
+      // A change was made (or a question read fresh data): refresh every screen.
+      if (turn.outcome === 'done' || turn.intent.startsWith('query.') || a?.type === 'navigate') void qc.invalidateQueries()
+      const after: VoicePhase =
+        turn.outcome === 'confirm' ? 'confirm' : turn.outcome === 'ok' || turn.outcome === 'done' ? 'ready' : 'attention'
+      await say(turn.speech, after)
     },
     [navigate, qc, say, tts],
   )
@@ -155,8 +165,8 @@ export function useVoice(tts: TextToSpeech = defaultSpeech) {
   }, [tts])
 
   return useMemo(
-    () => ({ phase, muted, level, captions, suggestions, problem, sendText, toggleListening, toggleMute, speechAvailable: tts.available }),
-    [phase, muted, level, captions, suggestions, problem, sendText, toggleListening, toggleMute, tts.available],
+    () => ({ phase, muted, level, captions, suggestions, problem, checks, plan, awaiting, sendText, toggleListening, toggleMute, speechAvailable: tts.available }),
+    [phase, muted, level, captions, suggestions, problem, checks, plan, awaiting, sendText, toggleListening, toggleMute, tts.available],
   )
 }
 
