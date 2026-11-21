@@ -6,7 +6,15 @@ import { Avatar, Unassigned } from '../../components/ui/Avatar'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Card, Empty, ErrorBox, Loading, ProgressBar } from '../../components/ui/States'
-import { projectsApi, tasksApi, type Progress, type Task, type TaskStatus } from '../../services/api'
+import {
+  projectsApi,
+  requestsApi,
+  tasksApi,
+  type ExtensionRequest,
+  type Progress,
+  type Task,
+  type TaskStatus,
+} from '../../services/api'
 import { usePageSummary } from '../../voice/pageSummary'
 import { useMe } from '../auth/auth-context'
 import { Priority, ProjectBadge, StatusBadge } from '../tasks/Badges'
@@ -42,10 +50,50 @@ function Tile({ label, value, color }: { label: string; value: number; color: st
   )
 }
 
+function ExtensionItems({ items }: { items: ExtensionRequest[] }) {
+  const qc = useQueryClient()
+  const tz = useMe().organization.timezone
+  const decide = useMutation({
+    mutationFn: (v: { id: string; approve: boolean }) => requestsApi.decide(v.id, v.approve),
+    onSuccess: () => qc.invalidateQueries(),
+  })
+  return (
+    <>
+      {items.map((x) => (
+        <div key={x.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-[#1f3d5a] bg-[rgba(56,189,248,.06)] px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-ink-strong">
+              {x.requested_by} asks for more time on {x.task_key ? `${x.task_key} · ` : ''}{x.task_title}
+            </p>
+            <p className="text-sm text-ink-muted">
+              Until {formatDue(x.requested_due_at, tz)}
+              {x.previous_due_at ? ` (now ${formatDue(x.previous_due_at, tz)})` : ''}. Reason: “{x.reason}”
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: x.id, approve: true })}>
+              Approve
+            </Button>
+            <Button size="sm" disabled={decide.isPending} onClick={() => decide.mutate({ id: x.id, approve: false })}>
+              Deny
+            </Button>
+          </div>
+        </div>
+      ))}
+      {decide.isError && <ErrorBox error={decide.error} />}
+    </>
+  )
+}
+
 function Overview({ progress, tasks }: { progress: Progress; tasks: Task[] }) {
   const review = tasks.filter((t) => t.status === 'PENDING_REVIEW')
   const blocked = tasks.filter((t) => t.status === 'BLOCKED')
-  const nothing = review.length + blocked.length + progress.needs_decision.length === 0
+  const extensions = useQuery({
+    queryKey: ['extensions', progress.project_id],
+    queryFn: () => requestsApi.pending(progress.project_id),
+  })
+  const ext = extensions.data ?? []
+  const nothing = review.length + blocked.length + progress.needs_decision.length + ext.length === 0
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3">
@@ -80,6 +128,7 @@ function Overview({ progress, tasks }: { progress: Progress; tasks: Task[] }) {
               <TaskActions task={t} role="manager" />
             </div>
           ))}
+          <ExtensionItems items={ext} />
           {progress.needs_decision.map((d) => (
             <div key={d.task_id} className="rounded-xl border border-[#4c2d73] bg-[rgba(168,85,247,.07)] px-4 py-3">
               <p className="text-sm font-semibold text-ink-strong">{d.key} · {d.title} needs your decision</p>

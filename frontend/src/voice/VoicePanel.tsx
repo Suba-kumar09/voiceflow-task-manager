@@ -17,7 +17,7 @@ const PHASE: Record<VoicePhase, { label: string; color: string }> = {
 }
 
 const MANAGER_HINTS = ['What is still pending?', 'Approve it', 'Assign the ready tasks by priority', 'Read my notifications']
-const EMPLOYEE_HINTS = ['What’s my task?', 'I’ve started my task', 'I’ve completed my task', 'I’m blocked']
+const EMPLOYEE_HINTS = ['What’s my task?', 'I’ve started my task', 'I’m halfway done', 'I need more time', 'I’ve completed my task']
 
 function MicIcon({ off }: { off?: boolean }) {
   return (

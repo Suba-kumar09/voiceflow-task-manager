@@ -22,6 +22,7 @@ from app.schemas.tasks import (
     TaskUpdate,
     TransitionIn,
 )
+from app.services import requests as requests_svc
 from app.services.idempotency import run_idempotent
 from app.services.orchestrator import service as orchestrator
 from app.services.tasks import service
@@ -59,6 +60,8 @@ def _to_out(db: Session, tasks: list[Task]) -> list[TaskOut]:
             .order_by(Skill.name)
         ).all():
             skills.setdefault(tid, []).append(name)
+    progress = requests_svc.latest_progress(db, task_ids)
+    pending = requests_svc.pending_by_task(db, task_ids)
     return [
         TaskOut(
             id=t.id,
@@ -84,6 +87,17 @@ def _to_out(db: Session, tasks: list[Task]) -> list[TaskOut]:
             updated_at=t.updated_at,
             depends_on=deps.get(t.id, []),
             required_skills=skills.get(t.id, []),
+            progress_percent=progress[t.id].percent if t.id in progress else None,
+            progress_note=progress[t.id].note if t.id in progress else None,
+            pending_extension=(
+                {
+                    "id": str(pending[t.id].id),
+                    "requested_due_at": pending[t.id].requested_due_at.isoformat(),
+                    "reason": pending[t.id].reason,
+                }
+                if t.id in pending
+                else None
+            ),
         )
         for t in tasks
     ]

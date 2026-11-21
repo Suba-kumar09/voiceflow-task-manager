@@ -60,6 +60,7 @@ function routes(onTurn: (body: { text: string; path: string; page_summary?: stri
     'GET /api/v1/projects/p1/progress': ok(progress),
     'GET /api/v1/projects/p1': ok(project),
     'GET /api/v1/tasks?limit=200&project_id=p1': ok({ items: [], total: 0, limit: 200, offset: 0 }),
+    'GET /api/v1/extension-requests?project_id=p1': ok([]),
     'POST /api/v1/voice/turns': (init: RequestInit | undefined) => ({ status: 200, body: onTurn(JSON.parse(String(init?.body))) }),
   }
 }

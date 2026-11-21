@@ -15,11 +15,14 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
+from datetime import time as dtime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.agent.dates import local_now, parse_spoken_date, spoken
 from app.agent.intents import Intent, parse
 from app.agent.voice_turn import (
     TurnResult,
@@ -43,6 +46,7 @@ from app.models import (
 )
 from app.models.common import utcnow
 from app.services import projects as project_svc
+from app.services import requests as requests_svc
 from app.services.errors import DomainError
 from app.services.notifications import team_manager_ids
 from app.services.orchestrator import service as orchestrator
@@ -62,6 +66,11 @@ CHANGE_TOOLS = {
     "task.assign",
     "project.assign_ready",
     "project.start",
+    "task.extend",
+    "task.decline",
+    "task.progress",
+    "extension.approve",
+    "extension.deny",
 }
 MANAGER_TOOLS = {
     "task.approve",
@@ -69,6 +78,8 @@ MANAGER_TOOLS = {
     "task.assign",
     "project.assign_ready",
     "project.start",
+    "extension.approve",
+    "extension.deny",
 }
 
 
@@ -452,7 +463,7 @@ def _propose(db: Session, p: Principal, intent: Intent, path: str | None) -> Pro
                 + (f" {others}" if others else " No tasks are ready."),
                 checks,
             )
-        spoken = "; ".join(
+        read_out = "; ".join(
             f"{i.task.title} to {i.assignee.name}"
             if i.assignee
             else f"{i.task.title} stays ready, because {i.reason[0].lower()}{i.reason[1:]}"
@@ -461,9 +472,122 @@ def _propose(db: Session, p: Principal, intent: Intent, path: str | None) -> Pro
         return Proposal(
             "project.assign_ready",
             {"project_id": str(project.id)},
-            f"By priority: {spoken}. Shall I assign {len(assign)} task{'s' if len(assign) != 1 else ''}?",
+            f"By priority: {read_out}. Shall I assign {len(assign)} task{'s' if len(assign) != 1 else ''}?",
             checks,
             plan=rows,
+        )
+
+    if intent.name == "task.extend":
+        task = resolve_task(
+            db,
+            p,
+            s.get("task", ""),
+            mine=True,
+            path=path,
+            what="active tasks",
+            statuses=list(requests_svc.ACTIVE),
+        )
+        checks = [ok(f"Matched to {_say_task(task)}"), ok("You are the assignee")]
+        checks.append(
+            ok(f"Current due date: {spoken(task.due_at, task.timezone)}")
+            if task.due_at
+            else warn("It has no due date yet")
+        )
+        if task.id in requests_svc.pending_by_task(db, [task.id]):
+            raise Stop(
+                "clarify",
+                f"You already asked for more time on {task.title}. It is waiting for {_manager_names(db, task)}.",
+                checks,
+            )
+        args = {"task_id": str(task.id), "due_at": None, "reason": s.get("reason")}
+        due = parse_spoken_date(s.get("when", ""), local_now(task.timezone), _due_time(task))
+        if due is not None:
+            problem = _check_due(task, due)
+            if problem:
+                raise Stop(
+                    "clarify", f"{problem} Please say a later date.", checks + [fail(problem)]
+                )
+            args["due_at"] = due.isoformat()
+        awaiting, question = _next_step(db, "task.extend", args)
+        return Proposal(
+            "task.extend",
+            args,
+            "" if awaiting else question,
+            checks,
+            awaiting=awaiting,
+            ask=question if awaiting else "",
+        )
+
+    if intent.name == "task.decline":
+        task = resolve_task(
+            db,
+            p,
+            s.get("task", ""),
+            mine=True,
+            path=path,
+            what="new tasks you can decline",
+            statuses=[TaskStatus.ASSIGNED],
+        )
+        args = {"task_id": str(task.id), "reason": s.get("reason")}
+        awaiting, question = _next_step(db, "task.decline", args)
+        return Proposal(
+            "task.decline",
+            args,
+            "" if awaiting else question,
+            [ok(f"Matched to {_say_task(task)}")],
+            awaiting=awaiting,
+            ask=question if awaiting else "",
+        )
+
+    if intent.name == "task.progress":
+        task = resolve_task(
+            db,
+            p,
+            s.get("task", ""),
+            mine=True,
+            path=path,
+            what="active tasks",
+            statuses=list(requests_svc.ACTIVE),
+        )
+        percent = int(s["percent"])
+        if not 0 <= percent <= 100:
+            raise Stop("clarify", "Progress must be between 0 and 100 percent.")
+        return Proposal(
+            "task.progress",
+            {"task_id": str(task.id), "percent": percent},
+            f"Record {task.title} as {percent} percent done?",
+            [ok(f"Matched to {_say_task(task)}")],
+        )
+
+    if intent.name in ("extension.approve", "extension.deny"):
+        req, task = _resolve_extension(db, p, s.get("task", ""), path)
+        who = db.get(User, req.requested_by).display_name
+        checks = [
+            ok(f"{who} asked for more time on {_say_task(task)}"),
+            ok(
+                f"Until {spoken(req.requested_due_at, task.timezone)}"
+                + (
+                    f" (now {spoken(req.previous_due_at, task.timezone)})"
+                    if req.previous_due_at
+                    else ""
+                )
+            ),
+            ok(f"Their reason: “{req.reason}”"),
+        ]
+        if intent.name == "extension.approve":
+            return Proposal(
+                "extension.approve",
+                {"request_id": str(req.id)},
+                f"Give {who} until {spoken(req.requested_due_at, task.timezone)} for {task.title}?",
+                checks,
+            )
+        reason = s.get("reason")
+        return Proposal(
+            "extension.deny",
+            {"request_id": str(req.id), "note": reason},
+            f"Turn down {who}'s request for more time on {task.title}"
+            + (f", because: {reason}?" if reason else "?"),
+            checks,
         )
 
     raise Stop("unsupported", "Sorry, I can't do that yet.")
@@ -562,6 +686,44 @@ def _execute(db: Session, p: Principal, tool: str, args: dict) -> tuple[str, uui
             return prefix + "Nothing could be assigned right now.", None
         listed = ", ".join(f"{a['title']} to {a['assignee_name']}" for a in done[:5])
         return prefix + f"I assigned {listed}. Everyone has been told.", None
+    if tool == "task.extend":
+        t = db.get(Task, tid)
+        due = datetime.fromisoformat(args["due_at"])
+        requests_svc.request_extension(db, p, tid, due, args["reason"])
+        current = (
+            f" Your deadline stays {spoken(t.due_at, t.timezone)} until they decide."
+            if t.due_at
+            else ""
+        )
+        return (
+            f"Done. I've asked {_manager_names(db, t)} for more time on {t.title}, until {spoken(due, t.timezone)}.{current}",
+            None,
+        )
+    if tool == "task.decline":
+        t = task_svc.transition(db, p, tid, Action.DECLINE, reason=args["reason"])
+        return (
+            f"Done. {t.title} is back in the task pool and {_manager_names(db, t)} has been told.",
+            tid,
+        )
+    if tool == "task.progress":
+        requests_svc.report_progress(db, p, tid, percent=int(args["percent"]), note=None)
+        return f"Noted: {db.get(Task, tid).title} is {args['percent']} percent done.", None
+    if tool in ("extension.approve", "extension.deny"):
+        req = requests_svc.decide_extension(
+            db,
+            p,
+            uuid.UUID(args["request_id"]),
+            approve=tool == "extension.approve",
+            note=args.get("note"),
+        )
+        t = db.get(Task, req.task_id)
+        who = db.get(User, req.requested_by).display_name
+        if tool == "extension.approve":
+            return (
+                f"Approved. {t.title} is now due {spoken(t.due_at, t.timezone)}, and {who} has been told.",
+                None,
+            )
+        return f"Done. The deadline for {t.title} stays the same, and {who} has been told.", None
     raise DomainError(f"Unknown tool {tool}")
 
 
@@ -613,6 +775,144 @@ def _strip_lead(text: str, words: str) -> str:
     return re.sub(rf"^\s*(?:{words})\b[\s:,-]*", "", text, flags=re.IGNORECASE).strip().rstrip(".")
 
 
+# ----------------------------------------------------------------------------- multi-step slots
+
+_LEADS = {
+    "note": "note|my note is|the note is",
+    "reason": "because|it's because|the reason is|reason",
+    "date": "until|till|by|to|on",
+}
+
+
+def _check_due(task: Task, due: datetime) -> str | None:
+    """Why a requested date is not acceptable, or None."""
+    if due <= utcnow():
+        return "That date has already passed."
+    if task.due_at and due <= task.due_at:
+        return f"That is not later than the current due date, {spoken(task.due_at, task.timezone)}."
+    return None
+
+
+def _next_step(db: Session, tool: str, args: dict) -> tuple[str | None, str]:
+    """(field still missing, question) or (None, read-back question)."""
+    task = db.get(Task, uuid.UUID(args["task_id"])) if args.get("task_id") else None
+    if tool == "task.complete":
+        if task.evidence_policy is EvidencePolicy.NOTE and not args.get("note"):
+            return (
+                "note",
+                f"Before I send {task.title} for review, it needs a short completion note. What should the note say?",
+            )
+        return None, _complete_question(
+            db,
+            task,
+            args.get("note"),
+            lifecycle.needs_review(task.requires_approval, task.evidence_policy),
+        )
+    if tool == "task.block":
+        if not args.get("reason"):
+            return "reason", f"What is blocking {task.title}?"
+        return None, _block_question(db, task, args["reason"])
+    if tool == "task.reject":
+        if not args.get("reason"):
+            return "reason", f"What still needs to be done on {task.title}?"
+        who = db.get(User, task.assigned_to).display_name if task.assigned_to else "the assignee"
+        return None, f"Send {task.title} back to {who} because: {args['reason']}?"
+    if tool == "task.extend":
+        if not args.get("due_at"):
+            return (
+                "date",
+                f"Until when do you need {task.title}? For example: Friday, or in three days.",
+            )
+        if not args.get("reason"):
+            return "reason", f"Why do you need more time for {task.title}?"
+        due = datetime.fromisoformat(args["due_at"])
+        return None, (
+            f"Ask {_manager_names(db, task)} to move {task.title} to {spoken(due, task.timezone)}, "
+            f"because: {args['reason']}? The deadline changes only if they approve."
+        )
+    if tool == "task.decline":
+        if not args.get("reason"):
+            return "reason", f"Why are you declining {task.title}?"
+        return (
+            None,
+            f"Decline {task.title} because: {args['reason']}? It goes back to the task pool and {_manager_names(db, task)} will be told.",
+        )
+    raise DomainError(f"No follow-up questions for {tool}")
+
+
+def _fill(db: Session, pending: AgentPendingAction, text: str, intent: Intent) -> TurnResult:
+    field_name = pending.awaiting
+    args = dict(pending.args)
+    task = db.get(Task, uuid.UUID(args["task_id"]))
+    value = _strip_lead(text, _LEADS[field_name])
+    if field_name == "date":
+        due = parse_spoken_date(value or text, local_now(task.timezone), _due_time(task))
+        problem = "I didn't catch a date." if due is None else _check_due(task, due)
+        if problem:
+            return TurnResult(
+                intent, "clarify", f"{problem} Until when do you need it?", tool=pending.tool
+            )
+        args["due_at"] = due.isoformat()
+        recorded = ok(f"New date: {spoken(due, task.timezone)}")
+    else:
+        if not value:
+            return TurnResult(
+                intent,
+                "clarify",
+                "Sorry, I didn't get that. Please say it again.",
+                tool=pending.tool,
+            )
+        args[field_name] = value
+        recorded = ok(f"{field_name.capitalize()} recorded: “{value}”")
+    awaiting, question = _next_step(db, pending.tool, args)
+    pending.args, pending.awaiting = args, awaiting
+    pending.summary = "" if awaiting else question
+    pending.expires_at = utcnow() + PENDING_TTL
+    if awaiting:
+        return TurnResult(intent, "clarify", question, checks=[recorded], tool=pending.tool)
+    return TurnResult(
+        intent,
+        "confirm",
+        question,
+        awaiting_confirmation=True,
+        tool=pending.tool,
+        checks=[recorded],
+        suggestions=["Yes", "Cancel"],
+    )
+
+
+def _due_time(task: Task) -> dtime:
+    """Keep the task's usual due time of day when moving it; default 6 PM."""
+    if task.due_at:
+        return (
+            task.due_at.astimezone(ZoneInfo(task.timezone)).time().replace(second=0, microsecond=0)
+        )
+    return dtime(18, 0)
+
+
+def _resolve_extension(db: Session, p: Principal, hint: str, path: str | None):
+    rows = [
+        (r, t)
+        for r, t in requests_svc.list_extensions(db, p, pending_only=True)
+        if p.is_admin or t.team_id in p.managed_team_ids
+    ]
+    here = _current_project_id(path)
+    if not hint:
+        local = [x for x in rows if here and x[1].project_id == here] or rows
+        if len(local) == 1:
+            return local[0]
+        if not local:
+            raise Stop("clarify", "There are no extension requests waiting for you.")
+        raise Stop("clarify", "Which one? " + ", ".join(t.title for _, t in local[:4]) + ".")
+    found = _match(hint, rows, lambda x: x[1].title)
+    if len(found) == 1:
+        return found[0]
+    raise Stop(
+        "clarify",
+        "Which extension request? " + ", ".join(t.title for _, t in (found or rows)[:4]) + ".",
+    )
+
+
 # ----------------------------------------------------------------------------- one turn
 
 
@@ -642,57 +942,11 @@ def run_turn(
     pending_id = pending.id if pending else None
 
     try:
-        # 1. Filling in a missing note / reason
+        # 1. Filling in a missing note / reason / date, then the next question or the read-back
         if pending and pending.awaiting and intent.name not in ("cancel", "confirm.no"):
-            field_name = pending.awaiting
-            value = _strip_lead(
-                text,
-                "note|my note is|the note is"
-                if field_name == "note"
-                else "because|it's because|the reason is",
-            )
-            if not value:
-                result = TurnResult(
-                    intent,
-                    "clarify",
-                    "Sorry, I didn't get that. "
-                    + (
-                        "What should the note say?"
-                        if field_name == "note"
-                        else "What is the reason?"
-                    ),
-                )
-            else:
-                args = {**pending.args, field_name: value}
-                task = db.get(Task, uuid.UUID(args["task_id"]))
-                if pending.tool == "task.complete":
-                    summary = _complete_question(
-                        db,
-                        task,
-                        value,
-                        lifecycle.needs_review(task.requires_approval, task.evidence_policy),
-                    )
-                elif pending.tool == "task.block":
-                    summary = _block_question(db, task, value)
-                else:
-                    who = (
-                        db.get(User, task.assigned_to).display_name
-                        if task.assigned_to
-                        else "the assignee"
-                    )
-                    summary = f"Send {task.title} back to {who} because: {value}?"
-                pending.args, pending.awaiting, pending.summary = args, None, summary
-                pending.expires_at = utcnow() + PENDING_TTL
-                steps.append({"step": "slot_filled", "field": field_name})
-                result = TurnResult(
-                    intent,
-                    "confirm",
-                    summary,
-                    awaiting_confirmation=True,
-                    tool=pending.tool,
-                    checks=[ok(f"{field_name.capitalize()} recorded: “{value}”")],
-                    suggestions=["Yes", "Cancel"],
-                )
+            filled = pending.awaiting
+            result = _fill(db, pending, text, intent)
+            steps.append({"step": "slot_filled", "field": filled, "next": pending.awaiting})
             db.commit()
 
         # 2. Confirmation

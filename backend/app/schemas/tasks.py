@@ -93,6 +93,11 @@ class TaskOut(BaseModel):
     updated_at: datetime
     depends_on: list[str] = Field(default_factory=list, description="Keys of predecessor tasks")
     required_skills: list[str] = Field(default_factory=list)
+    progress_percent: int | None = None
+    progress_note: str | None = None
+    pending_extension: dict | None = Field(
+        default=None, description="{id, requested_due_at, reason} while awaiting a manager"
+    )
 
 
 class CurrentTaskOut(BaseModel):

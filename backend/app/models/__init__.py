@@ -19,6 +19,7 @@ from app.models.planning import (
     TaskRequiredSkill,
     UserSkill,
 )
+from app.models.requests import DeadlineExtensionRequest, ExtensionStatus, TaskProgressUpdate
 from app.models.tasks import (
     ACTIVE_HOLD_STATUSES,
     AssignmentEndReason,
@@ -37,6 +38,9 @@ from app.models.tasks import (
 )
 
 __all__ = [
+    "DeadlineExtensionRequest",
+    "ExtensionStatus",
+    "TaskProgressUpdate",
     "AgentPendingAction",
     "AgentTrace",
     "Notification",

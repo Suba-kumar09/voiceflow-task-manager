@@ -109,8 +109,60 @@ def test_parse(said, name, slots):
         ("no, not now", "confirm.no", {}),
         ("go ahead", "confirm.yes", {}),
         ("No", "confirm.no", {}),
+        # Phase 8: extensions, decline, progress
+        ("I need more time", "task.extend", {"task": "", "when": "i need more time"}),
+        (
+            "I need more time on the cart API until Friday because the sandbox is down",
+            "task.extend",
+            {
+                "task": "cart api",
+                "when": "i need more time on the cart api until friday",
+                "reason": "the sandbox is down",
+            },
+        ),
+        (
+            "Can I get two more days?",
+            "task.extend",
+            {"task": "", "when": "can i get two more days"},
+        ),
+        (
+            "I need more time on the cart API for three more days",
+            "task.extend",
+            {"task": "cart api", "when": "i need more time on the cart api for three more days"},
+        ),
+        (
+            "I need an extension for the wishlist page",
+            "task.extend",
+            {"task": "wishlist page", "when": "i need an extension for the wishlist page"},
+        ),
+        ("Approve the extension", "extension.approve", {"task": ""}),
+        ("Approved the extension.", "extension.approve", {"task": ""}),  # real mishearing
+        ("Approved it.", "task.approve", {"task": ""}),
+        ("approve the extension for the cart API", "extension.approve", {"task": "cart api"}),
+        (
+            "Deny the extension because the launch date is fixed",
+            "extension.deny",
+            {"task": "", "reason": "the launch date is fixed"},
+        ),
+        (
+            "I can't do the wishlist page because I have no React access",
+            "task.decline",
+            {"task": "wishlist page", "reason": "I have no React access"},
+        ),
+        ("decline it", "task.decline", {"task": ""}),
+        (
+            "I'm about 60 percent done with the catalog API",
+            "task.progress",
+            {"task": "catalog api", "percent": "60"},
+        ),
+        ("I'm halfway through", "task.progress", {"task": "", "percent": "50"}),
+        (
+            "progress on the cart API is 30 percent",
+            "task.progress",
+            {"task": "cart api", "percent": "30"},
+        ),
         # still unsupported by voice
-        ("I need more time", "change.not_yet", {"utterance": "i need more time"}),
+        ("reassign the cart API", "change.not_yet", {"utterance": "reassign the cart api"}),
     ],
 )
 def test_change_commands_and_slots(said, name, slots):

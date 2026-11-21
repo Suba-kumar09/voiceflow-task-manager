@@ -14,8 +14,24 @@ function routes(extra = {}) {
     'GET /api/v1/projects/p1': ok(project),
     'GET /api/v1/projects/p1/progress': ok(progress),
     'GET /api/v1/tasks?limit=200&project_id=p1': ok(page([task(), review, waiting])),
+    'GET /api/v1/extension-requests?project_id=p1': ok([extension]),
     ...extra,
   }
+}
+
+const extension = {
+  id: 'ext1',
+  task_id: 'task1',
+  task_title: 'Product listing page',
+  task_key: 'EC05',
+  project_id: 'p1',
+  requested_by: 'Subashini',
+  previous_due_at: '2026-11-27T12:30:00Z',
+  requested_due_at: '2026-11-30T12:30:00Z',
+  reason: 'The design changed',
+  status: 'PENDING',
+  decision_note: null,
+  created_at: '2026-11-21T10:00:00Z',
 }
 
 describe('project page (manager)', () => {
@@ -53,6 +69,17 @@ describe('project page (manager)', () => {
     expect(await screen.findByText(/UI design mockups is awaiting your review/)).toBeInTheDocument()
     expect(screen.getByText(/iOS build setup needs your decision/)).toBeInTheDocument()
     expect(screen.getByText('No one on the team has ios.')).toBeInTheDocument()
+  })
+
+  it('shows extension requests and approves one', async () => {
+    window.history.pushState({}, '', '/projects/p1')
+    const { calls } = mockApi(routes({ 'POST /api/v1/extension-requests/ext1/approve': ok({ ...extension, status: 'APPROVED' }) }))
+    render(<App />)
+    const item = (await screen.findByText(/Subashini asks for more time on EC05 · Product listing page/)).closest('div')!.parentElement!
+    expect(item).toHaveTextContent('Reason: “The design changed”')
+    await userEvent.setup().click(within(item).getByRole('button', { name: 'Approve' }))
+    await screen.findByText(/Subashini asks for more time/)
+    expect(calls.some((c) => c.key === 'POST /api/v1/extension-requests/ext1/approve')).toBe(true)
   })
 
   it('"Assign ready tasks" reads the plan back, then assigns on confirmation', async () => {

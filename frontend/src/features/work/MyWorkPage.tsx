@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { Card, Empty, ErrorBox, Loading } from '../../components/ui/States'
+import { Card, Empty, ErrorBox, Loading, ProgressBar } from '../../components/ui/States'
 import { tasksApi } from '../../services/api'
 import { usePageSummary } from '../../voice/pageSummary'
 import { useMe } from '../auth/auth-context'
 import { Priority, StatusBadge } from '../tasks/Badges'
+import { RequestActions } from '../tasks/RequestActions'
 import { TaskActions } from '../tasks/TaskActions'
 import { formatDue, priorityLabel } from '../tasks/taskLabels'
 
@@ -65,7 +66,17 @@ export function MyWorkPage() {
                 </div>
               )}
               {task.description && <p className="text-sm text-ink">{task.description}</p>}
+              {task.progress_percent !== null && (
+                <div>
+                  <div className="mb-1 flex justify-between text-xs text-[#a7c4c2]">
+                    <span>Progress{task.progress_note ? ` · ${task.progress_note}` : ''}</span>
+                    <span className="font-semibold text-ink-strong">{task.progress_percent}%</span>
+                  </div>
+                  <ProgressBar percent={task.progress_percent} label={`${task.progress_percent} percent done`} height={6} />
+                </div>
+              )}
               <TaskActions task={task} role="assignee" />
+              <RequestActions task={task} />
             </div>
           )}
         </section>

@@ -94,6 +94,73 @@ def _change_intent(t: str, raw: str) -> Intent | None:
         r"\b(?:because|since|reason is|due to|note|notes|with the note|with a note)\b", t
     )[0].strip()
 
+    # Manager: decide an extension request (before generic approve/reject)
+    if m := _m(
+        r"(?:approved?|accept(?:ed)?|grant(?:ed)?|allow(?:ed)?) (?:the |that |this )?(?:deadline |time )?extension(?: request)?(?: (?:for|on) (?:the )?(.+))?",
+        body,
+    ):
+        return Intent("extension.approve", {"task": _task_hint(m.group(1))})
+    if m := _m(
+        r"(?:deny|reject|decline|refuse) (?:the |that |this )?(?:deadline |time )?extension(?: request)?(?: (?:for|on) (?:the )?(.+))?",
+        body,
+    ):
+        slots = {"task": _task_hint(m.group(1))}
+        if reason:
+            slots["reason"] = reason
+        return Intent("extension.deny", slots)
+
+    # Employee: decline an assignment
+    if m := _m(
+        r"(?:i can't do|i cannot do|i can not do|i won't be able to do|i'm not able to do|i am not able to do|i (?:want to |would like to |have to )?decline|decline)(.*)",
+        body,
+    ):
+        slots = {"task": _task_hint(m.group(1))}
+        if reason:
+            slots["reason"] = reason
+        return Intent("task.decline", slots)
+
+    # Employee: ask for more time (the date words stay in "when" for the date parser)
+    if re.search(
+        r"\b(?:more time|extra time|an? (?:deadline )?extension|extend (?:the |my )?(?:deadline|due date)|more days?|more weeks?|another (?:day|week))\b",
+        body,
+    ):
+        hint = ""
+        if m := re.search(
+            r"\b(?:on|for|with|of) (?:the |my )?(.+?)(?= until| till| by| to | in \d| in (?:a|one|two|three|four|five) | for (?:\w+ )?(?:more |extra )?(?:days?|weeks?)\b|$)",
+            body,
+        ):
+            hint = _task_hint(m.group(1))
+            if re.fullmatch(
+                r"(?:\w+ )?(?:more |extra )?(?:days?|weeks?)|(?:a|one|another) (?:day|week)", hint
+            ):
+                hint = ""
+        slots = {"task": hint, "when": body}
+        if reason:
+            slots["reason"] = reason
+        return Intent("task.extend", slots)
+
+    # Employee: progress ("I'm about 60 percent done with the catalog API")
+    if m := _m(
+        r"(?:i'm|i am|it's|it is|we're|we are|progress (?:on (?:the )?(.+?) )?is)? ?(?:about |around |roughly |nearly |almost |at )?"
+        r"(\d{1,3}|half|halfway|a quarter|quarter|three quarters)(?: percent| per cent)?(?: done| complete| finished| through| of the way)?(?: (?:with|on) (?:the |my )?(.+))?",
+        body,
+    ):
+        word = m.group(2)
+        percent = {
+            "half": 50,
+            "halfway": 50,
+            "a quarter": 25,
+            "quarter": 25,
+            "three quarters": 75,
+        }.get(word)
+        if percent is None and word.isdigit():
+            percent = int(word)
+        if percent is not None and (word.isdigit() or m.group(0) != word):
+            return Intent(
+                "task.progress",
+                {"task": _task_hint(m.group(1) or m.group(3)), "percent": str(percent)},
+            )
+
     # Employee: completion
     if m := _m(
         r"(?:i(?:'ve| have)? (?:completed|finished)|i(?:'m| am) (?:done|finished) with|i(?:'m| am) done|i finished|"
@@ -122,7 +189,8 @@ def _change_intent(t: str, raw: str) -> Intent | None:
         return Intent("task.resume", {"task": _task_hint(m.group(1))})
 
     # Manager: approve / reject
-    if m := _m(r"(?:approve|accept the work on|accept)(.*)", body):
+    # "approved" too: the recogniser often hears "Approve it" as "Approved it".
+    if m := _m(r"(?:approved?|accept the work on|accept(?:ed)?)\b(.*)", body):
         return Intent("task.approve", {"task": _task_hint(m.group(1))})
     if m := _m(r"(?:reject|send back|send it back|send that back|send this back)(.*)", body):
         slots = {"task": _task_hint(re.sub(r"^\s*(?:it|that|this)?\s*back\b", "", m.group(1)))}
@@ -149,7 +217,7 @@ def _change_intent(t: str, raw: str) -> Intent | None:
         return Intent("task.start", {"task": _task_hint(m.group(1))})
 
     # Recognised but not supported by voice yet
-    if re.search(r"\b(?:decline|extend|extension|more time|reassign|cancel (?:the )?task)\b", t):
+    if re.search(r"\b(?:reassign|cancel (?:the )?task|delete (?:the )?task)\b", t):
         return Intent("change.not_yet", {"utterance": t})
     return None
 

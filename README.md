@@ -5,9 +5,11 @@ orchestrator assigns all eligible tasks, and employees receive and update work b
 `CLAUDE.md` is the product and engineering source of truth; `docs/decisions.md` records
 decisions and measurements.
 
-**Status:** Phase 7 — voice commands that change data (complete, start, blocked, approve,
-send back, assign ready tasks, assign to a person, start project) through the execution
-harness with read-back and "yes" confirmation, plus traces. Built on voice navigation and local
+**Status:** Phase 8 — the full employee voice workflow: deadline extension requests (with
+spoken dates) decided by managers, declining, and progress updates — on top of Phase 7's
+voice commands that change data (complete, start, blocked, approve, send back, assign ready
+tasks, assign to a person, start project) through the execution harness with read-back and
+"yes" confirmation, plus traces. Built on voice navigation and local
 speech recognition (Phase 6), the dark screens (Phase 5), the orchestrator (Phase 4), the task
 core (Phase 3), sign-in/roles (Phase 2) and the foundation (Phase 1).
 

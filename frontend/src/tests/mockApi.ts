@@ -67,6 +67,9 @@ export function task(overrides: Partial<Task> = {}): Task {
     updated_at: '2026-11-20T10:00:00Z',
     depends_on: ['EC02', 'EC03'],
     required_skills: ['React'],
+    progress_percent: null,
+    progress_note: null,
+    pending_extension: null,
     ...overrides,
   }
 }

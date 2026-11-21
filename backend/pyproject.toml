@@ -58,4 +58,5 @@ known-third-party = ["alembic"]
 "alembic/versions/*" = ["E501"]  # generated migrations contain long SQL literals
 "app/agent/intents.py" = ["E501"]  # spoken-command patterns are clearer unsplit
 "app/agent/harness.py" = ["E501"]  # spoken sentence templates are clearer unsplit
+"app/services/requests.py" = ["E501"]  # notification sentences are clearer unsplit
 "tests/unit/test_intents.py" = ["E501"]  # spoken test phrases

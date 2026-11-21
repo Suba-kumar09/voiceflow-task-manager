@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -31,6 +31,38 @@ describe('my work (employee)', () => {
     await user.type(within(dialog).getByLabelText(/Completion note/), 'All products show price, stock and images.')
     await user.click(submit)
     expect(sent).toEqual({ note: 'All products show price, stock and images.' })
+  })
+
+  it('asks for more time with a date and a reason; shows the pending request afterwards', async () => {
+    let sent: { requested_due_at: string; reason: string } | undefined
+    let current = task()
+    mockApi({
+      ...shellRoutes(employee),
+      'GET /api/v1/me/tasks/current': () => ({ status: 200, body: { task: current } }),
+      'GET /api/v1/me/tasks?limit=200': () => ({ status: 200, body: page([current]) }),
+      'POST /api/v1/tasks/task1/extension-requests': (init) => {
+        sent = JSON.parse(String(init?.body))
+        current = task({ pending_extension: { id: 'e1', requested_due_at: sent!.requested_due_at, reason: sent!.reason } })
+        return { status: 201, body: {} }
+      },
+    })
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Need more time' }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/the deadline changes only if they approve/)).toBeInTheDocument()
+    const send = within(dialog).getByRole('button', { name: 'Send request' })
+    expect(send).toBeDisabled()
+    // Date pickers report their value through a change event (typing does not apply in jsdom).
+    fireEvent.change(within(dialog).getByLabelText(/New due date/), { target: { value: '2026-11-30' } })
+    await user.type(within(dialog).getByLabelText(/Why do you need more time/), 'The design changed')
+    expect(within(dialog).getByLabelText(/New due date/)).toHaveValue('2026-11-30')
+    expect(within(dialog).getByLabelText(/Why do you need more time/)).toHaveValue('The design changed')
+    expect(send).toBeEnabled()
+    await user.click(send)
+    await waitFor(() => expect(sent?.reason).toBe('The design changed'))
+    expect(new Date(sent!.requested_due_at).toISOString()).toBe(sent!.requested_due_at) // a real timestamp
+    expect(await screen.findByText(/waiting for your manager/)).toBeInTheDocument()
   })
 
   it('a blocker needs a reason', async () => {

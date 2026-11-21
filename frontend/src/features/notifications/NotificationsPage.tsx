@@ -18,6 +18,9 @@ const dot: Record<AppNotification['kind'], string> = {
   TASK_DECLINED: '#fb923c',
   PROJECT_SUMMARY: '#38bdf8',
   NEEDS_DECISION: '#c084fc',
+  EXTENSION_REQUESTED: '#38bdf8',
+  EXTENSION_APPROVED: '#4ade80',
+  EXTENSION_DENIED: '#fb923c',
 }
 
 export function NotificationsPage() {

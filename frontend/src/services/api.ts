@@ -95,6 +95,24 @@ export interface Task {
   updated_at: string
   depends_on: string[]
   required_skills: string[]
+  progress_percent: number | null
+  progress_note: string | null
+  pending_extension: { id: string; requested_due_at: string; reason: string } | null
+}
+
+export interface ExtensionRequest {
+  id: string
+  task_id: string
+  task_title: string
+  task_key: string | null
+  project_id: string | null
+  requested_by: string
+  previous_due_at: string | null
+  requested_due_at: string
+  reason: string
+  status: 'PENDING' | 'APPROVED' | 'DENIED' | 'WITHDRAWN'
+  decision_note: string | null
+  created_at: string
 }
 
 export type ProjectStatus = 'DRAFT' | 'READY' | 'ACTIVE' | 'PAUSED' | 'CLOSED'
@@ -185,6 +203,9 @@ export interface AppNotification {
     | 'TASK_DECLINED'
     | 'PROJECT_SUMMARY'
     | 'NEEDS_DECISION'
+    | 'EXTENSION_REQUESTED'
+    | 'EXTENSION_APPROVED'
+    | 'EXTENSION_DENIED'
   title: string
   body: string
   task_id: string | null
@@ -334,6 +355,26 @@ export const tasksApi = {
       method: 'POST',
       body,
       idempotencyKey: newIdempotencyKey(),
+    }),
+}
+
+export const requestsApi = {
+  pending: (projectId?: string) =>
+    request<ExtensionRequest[]>(`/api/v1/extension-requests${projectId ? `?project_id=${q(projectId)}` : ''}`),
+  ask: (taskId: string, requestedDueAt: string, reason: string) =>
+    request<ExtensionRequest>(`/api/v1/tasks/${q(taskId)}/extension-requests`, {
+      method: 'POST',
+      body: { requested_due_at: requestedDueAt, reason },
+    }),
+  decide: (requestId: string, approve: boolean, note?: string) =>
+    request<ExtensionRequest>(`/api/v1/extension-requests/${q(requestId)}/${approve ? 'approve' : 'deny'}`, {
+      method: 'POST',
+      body: { note: note || null },
+    }),
+  progress: (taskId: string, percent: number | null, note?: string) =>
+    request<unknown>(`/api/v1/tasks/${q(taskId)}/progress`, {
+      method: 'POST',
+      body: { percent, note: note || null },
     }),
 }
 

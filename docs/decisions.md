@@ -84,6 +84,18 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | U5 | The voice panel is present but shows "Microphone off — voice arrives in the next phase" with a disabled button. | A visual indicator must never imply the microphone is active. |
 | U6 | Task status UNASSIGNED is shown as **Open** (assignee column says "Not assigned"). | Avoids the same words twice in a row. |
 
+## 2026-11-21 — Phase 8: extensions, declining and progress
+
+| # | Decision | Why |
+|---|---|---|
+| X1 | **Deadline extension requests** (`deadline_extension_requests`): only the assignee of an active task may ask; the new date must be in the future and later than the current due date; a reason is required; at most one pending request per task (partial unique index). **The due date changes only when a manager of that team approves**; approval writes history (`extend_deadline`) and audit, and both sides are notified. | CLAUDE.md 4.10. |
+| X2 | **Spoken dates** (`app/agent/dates.py`): today, tomorrow, day after tomorrow, weekday names (the next such day), next week, end of the week, "in N days", "N more days/weeks", "27 November", "December 2nd" — resolved in the organisation's time zone, keeping the task's usual due time of day (default 6 PM). No date phrase → the assistant asks "Until when?"; it never guesses. | Dates must be exact and confirmed. |
+| X3 | Voice: "I need more time (on X) (until …) (because …)" asks for whatever is missing — date, then reason — one question at a time, reads back "Ask Kavitha to move X to Friday 27 November at 6 PM, because …? The deadline changes only if they approve." Managers: "Approve the extension" / "Deny the extension because …". | One natural conversation, nothing changes without "yes". |
+| X4 | **Decline** by voice ("I can't do X because …") and on screen, only while a task is newly ASSIGNED; the task returns to the pool and the orchestrator never hands it back to the same person. | D3. |
+| X5 | **Progress updates** (`task_progress_updates`): percent (0–100) and/or a short note, by voice ("I'm about 60 percent done with …") or a slider; the latest is shown on the task. Managers are not notified for progress (avoids noise). | Visibility without interruptions. |
+| X6 | Real recognition check found "Approve" heard as "Approved"; the parser now accepts both. | Measured, not assumed. |
+| X7 | The shared dialog now sets focus only when it opens (it used to pull focus back to the first field on every keystroke). | Found by the extension-form test. |
+
 ## 2026-11-21 — Phase 7: voice commands that change data (execution harness)
 
 | # | Decision | Why |

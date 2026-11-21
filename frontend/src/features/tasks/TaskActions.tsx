@@ -60,10 +60,9 @@ export function TaskActions({ task, role }: { task: Task; role: 'assignee' | 'ma
   const buttons: React.ReactNode[] = []
   if (role === 'assignee') {
     if (task.status === 'ASSIGNED' || task.status === 'ACCEPTED')
-      buttons.push(
-        <Button key="start" variant="primary" disabled={busy} onClick={() => run('start')}>Start</Button>,
-        <Button key="decline" disabled={busy} onClick={() => setDialog('decline')}>Decline</Button>,
-      )
+      buttons.push(<Button key="start" variant="primary" disabled={busy} onClick={() => run('start')}>Start</Button>)
+    if (task.status === 'ASSIGNED') // the rules allow declining only before accepting/starting
+      buttons.push(<Button key="decline" disabled={busy} onClick={() => setDialog('decline')}>Decline</Button>)
     if (task.status === 'IN_PROGRESS')
       buttons.push(
         <Button key="done" variant="primary" disabled={busy} onClick={() => setDialog('complete')}>Report done</Button>,

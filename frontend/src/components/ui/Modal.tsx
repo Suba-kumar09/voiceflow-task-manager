@@ -14,7 +14,14 @@ export function Modal({
 }) {
   const titleId = useId()
   const panel = useRef<HTMLDivElement>(null)
+  // Callers often pass a new onClose on every render; keep the latest without re-running the
+  // effect, otherwise focus would jump back to the first field on each keystroke.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
+  // Runs once when the dialog opens: move focus inside, close on Esc, restore focus on close.
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null
     const first = panel.current?.querySelector<HTMLElement>(
@@ -22,15 +29,15 @@ export function Modal({
     )
     ;(first ?? panel.current)?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current()
     }
-    panel.current?.addEventListener('keydown', onKey)
     const node = panel.current
+    node?.addEventListener('keydown', onKey)
     return () => {
       node?.removeEventListener('keydown', onKey)
       previous?.focus()
     }
-  }, [onClose])
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4">
