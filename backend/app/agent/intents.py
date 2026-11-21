@@ -27,6 +27,62 @@ _TAB_WORDS = {
 }
 _NAV = r"(?:open|show|show me|go to|goto|take me to|navigate to|switch to|display|view|see)"
 
+# Spoken percentages: "sixty", "sixty five", "a hundred" (used only before "percent").
+_UNITS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+}
+_TEENS = {
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+}
+_TENS = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+_PCT_WORDS = (
+    r"(?:a |one )?hundred|(?:"
+    + "|".join(_TENS)
+    + r")(?:[ -](?:"
+    + "|".join(_UNITS)
+    + r"))?|"
+    + "|".join(_TEENS)
+    + "|"
+    + "|".join(_UNITS)
+)
+
+
+def _percent_words(word: str) -> int | None:
+    parts = word.replace("-", " ").split()
+    if parts[-1] == "hundred":
+        return 100
+    if len(parts) == 1:
+        return _TENS.get(parts[0]) or _TEENS.get(parts[0]) or _UNITS.get(parts[0])
+    if parts[0] in _TENS and parts[1] in _UNITS:
+        return _TENS[parts[0]] + _UNITS[parts[1]]
+    return None
+
 
 @dataclass(frozen=True)
 class Intent:
@@ -40,6 +96,7 @@ def normalize(text: str) -> str:
     t = re.sub(r"[^\w\s']", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     t = re.sub(r"\ba signed\b", "assign", t)  # common mishearing of "assign"
+    t = re.sub(r"^a sign\b", "assign", t)  # "A sign X to Y" (only as the first words)
     t = _FILLER.sub("", t)
     t = _TRAILING.sub("", t).strip()
     return t
@@ -142,7 +199,7 @@ def _change_intent(t: str, raw: str) -> Intent | None:
     # Employee: progress ("I'm about 60 percent done with the catalog API")
     if m := _m(
         r"(?:i'm|i am|it's|it is|we're|we are|progress (?:on (?:the )?(.+?) )?is)? ?(?:about |around |roughly |nearly |almost |at )?"
-        r"(\d{1,3}|half|halfway|a quarter|quarter|three quarters)(?: percent| per cent)?(?: done| complete| finished| through| of the way)?(?: (?:with|on) (?:the |my )?(.+))?",
+        rf"(\d{{1,3}}|{_PCT_WORDS}|half|halfway|a quarter|quarter|three quarters)( percent| per cent)?(?: done| complete| finished| through| of the way)?(?: (?:with|on) (?:the |my )?(.+))?",
         body,
     ):
         word = m.group(2)
@@ -155,10 +212,12 @@ def _change_intent(t: str, raw: str) -> Intent | None:
         }.get(word)
         if percent is None and word.isdigit():
             percent = int(word)
-        if percent is not None and (word.isdigit() or m.group(0) != word):
+        if percent is None and m.group(3):  # number words count only with "percent"
+            percent = _percent_words(word)
+        if percent is not None and percent <= 100 and (word.isdigit() or m.group(0) != word):
             return Intent(
                 "task.progress",
-                {"task": _task_hint(m.group(1) or m.group(3)), "percent": str(percent)},
+                {"task": _task_hint(m.group(1) or m.group(4)), "percent": str(percent)},
             )
 
     # Employee: completion

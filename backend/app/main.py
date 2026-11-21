@@ -10,6 +10,7 @@ from app.auth.throttle import LoginThrottle
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging, request_id_var
+from app.core.security import apply_security_headers
 
 
 def create_app() -> FastAPI:
@@ -19,9 +20,12 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=f"{settings.app_name} API",
         version="0.1.0",
-        docs_url="/api/docs",
-        openapi_url="/api/openapi.json",
+        # The interactive API docs are for development only.
+        docs_url="/api/docs" if settings.docs_enabled else None,
+        redoc_url=None,
+        openapi_url="/api/openapi.json" if settings.docs_enabled else None,
     )
+    production = settings.environment == "production"
 
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
@@ -37,6 +41,7 @@ def create_app() -> FastAPI:
         finally:
             request_id_var.reset(token)
         response.headers["X-Request-ID"] = rid
+        apply_security_headers(request, response, production=production)
         return response
 
     app.add_middleware(
@@ -50,6 +55,10 @@ def create_app() -> FastAPI:
     app.state.login_throttle = LoginThrottle(
         max_failures=settings.login_max_failures,
         window_seconds=settings.login_failure_window_minutes * 60,
+    )
+
+    app.state.voice_limiter = LoginThrottle(
+        max_failures=settings.voice_turns_per_minute, window_seconds=60
     )
 
     register_error_handlers(app)

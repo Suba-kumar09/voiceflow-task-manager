@@ -44,10 +44,24 @@ class Settings(BaseSettings):
     login_failure_window_minutes: int = 15
 
     # --- Voice (Phase 6) ---
-    stt_provider: Literal["faster-whisper", "disabled"] = "faster-whisper"
-    stt_model: str = "base.en"  # downloaded to HF_HOME (D:\ai-cache\hf on the dev laptop)
+    # onnx-whisper: Whisper base.en on ONNX Runtime (Microsoft-signed, loads under Windows
+    # Smart App Control). faster-whisper: same model on CTranslate2 (blocked on the dev laptop).
+    stt_provider: Literal["onnx-whisper", "faster-whisper", "disabled"] = "onnx-whisper"
+    # onnx-whisper model folder (python -m app.cli.fetch_stt_model downloads it there).
+    stt_model_dir: str | None = None
+    stt_model: str = "base.en"  # faster-whisper only: downloaded to HF_HOME
     stt_cpu_threads: int = 4
     stt_max_seconds: float = 20.0
+    # Per-person limit on voice commands (speech recognition is the expensive part).
+    voice_turns_per_minute: int = 30
+
+    # --- Retention (Phase 10; app/services/retention.py, run by the maintenance worker) ---
+    retention_trace_days: int = Field(default=30, ge=1)  # voice traces hold what people said
+    retention_notification_days: int = Field(default=90, ge=1)  # read notifications only
+
+    @property
+    def docs_enabled(self) -> bool:
+        return self.environment != "production"
 
     @property
     def cookie_secure(self) -> bool:

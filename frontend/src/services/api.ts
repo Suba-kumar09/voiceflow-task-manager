@@ -25,6 +25,8 @@ export interface ReadinessResponse {
   status: 'ready' | 'not_ready'
   database: 'ok' | 'unavailable' | 'not_configured'
   migrations: 'up_to_date' | 'pending' | 'unknown'
+  /** Information only: without speech, people can still type their commands. */
+  speech?: 'ok' | 'model_missing' | 'not_installed' | 'disabled'
 }
 
 export type UserRole = 'ADMIN' | 'MANAGER' | 'EMPLOYEE'

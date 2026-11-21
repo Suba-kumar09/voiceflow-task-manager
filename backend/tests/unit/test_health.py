@@ -12,11 +12,13 @@ def test_ready_reports_database_not_configured(make_client):
     client = make_client("")
     resp = client.get("/api/v1/ready")
     assert resp.status_code == 503
-    assert resp.json() == {
+    body = resp.json()
+    assert {k: body[k] for k in ("status", "database", "migrations")} == {
         "status": "not_ready",
         "database": "not_configured",
         "migrations": "unknown",
     }
+    assert body["speech"] in {"ok", "model_missing", "not_installed", "disabled"}
 
 
 def test_ready_reports_unreachable_database(make_client):

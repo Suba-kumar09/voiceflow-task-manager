@@ -8,7 +8,7 @@ import logging
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from app.agent.intents import Intent
 from app.agent.voice_turn import TurnResult
 from app.auth.principal import CurrentPrincipal, MutatingPrincipal, Principal
 from app.core.config import get_settings
+from app.core.security import read_body_limited
 from app.db.session import get_db
 from app.models import AgentTrace, TeamMembership, User
 from app.services import projects as project_svc
@@ -117,9 +118,18 @@ def _from_record(rec: TurnRecord, **kw) -> VoiceTurnOut:
     return _out(rec.result, trace_id=rec.trace_id, **kw)
 
 
+def _rate_limit(request: Request, p: Principal) -> None:
+    if not request.app.state.voice_limiter.hit(f"user:{p.user_id}"):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Too many voice commands in a minute. Please wait a moment and try again.",
+        )
+
+
 @router.post("/turns", response_model=VoiceTurnOut)
-def text_turn(body: TextTurnIn, p: MutatingPrincipal, db: DB) -> VoiceTurnOut:
+def text_turn(body: TextTurnIn, request: Request, p: MutatingPrincipal, db: DB) -> VoiceTurnOut:
     """Typed fallback (and test entry point): same harness without speech recognition."""
+    _rate_limit(request, p)
     t0 = time.perf_counter()
     rec = run_turn(db, p, body.text, path=body.path, page_summary=body.page_summary, channel="text")
     return _from_record(rec, transcript=body.text, clear=True, stt_ms=None, t0=t0)
@@ -144,8 +154,12 @@ async def audio_turn(
     page_summary: Annotated[str | None, Query(max_length=1000)] = None,
 ) -> VoiceTurnOut:
     """Body: 16 kHz mono 16-bit WAV, at most 20 s. Recorded only after the user pressed talk."""
+    _rate_limit(request, p)
     t0 = time.perf_counter()
-    clip = validate_wav(await request.body(), max_seconds=get_settings().stt_max_seconds)
+    max_seconds = get_settings().stt_max_seconds
+    # 16 kHz x 16-bit mono = 32 000 bytes per second, plus room for the WAV header.
+    body = await read_body_limited(request, int(max_seconds * 32_000) + 4096)
+    clip = validate_wav(body, max_seconds=max_seconds)
     hints = await run_in_threadpool(_hints, db, p)
     transcript = await run_in_threadpool(stt.transcribe, clip.wav_bytes, hints=hints)
     if not transcript.confident:

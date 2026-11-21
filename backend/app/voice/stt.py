@@ -1,6 +1,10 @@
 """Speech-to-text providers. Business logic depends only on the `SpeechToTextProvider` protocol.
 
-- FasterWhisperProvider: local, CPU, int8 (measured ~1.3 s for 7 s of speech on the dev laptop).
+- OnnxWhisperProvider (app/voice/onnx_whisper.py, default): Whisper base.en int8 on ONNX Runtime,
+  whose native files are Microsoft-signed and load under Windows Smart App Control
+  (~1 s per command).
+- FasterWhisperProvider: same model on CTranslate2 (~1.1 s), blocked by Smart App Control on the
+  dev laptop since 2026-11-21; kept for servers without that restriction.
 - FakeSpeechToText: deterministic, for tests (never depend on the real model in CI).
 """
 
@@ -124,4 +128,8 @@ def get_stt_provider() -> SpeechToTextProvider:
     s = get_settings()
     if s.stt_provider == "disabled":
         return DisabledSpeechToText()
-    return FasterWhisperProvider(s.stt_model, s.stt_cpu_threads)
+    if s.stt_provider == "faster-whisper":
+        return FasterWhisperProvider(s.stt_model, s.stt_cpu_threads)
+    from app.voice.onnx_whisper import OnnxWhisperProvider
+
+    return OnnxWhisperProvider(s.stt_model_dir, s.stt_cpu_threads)

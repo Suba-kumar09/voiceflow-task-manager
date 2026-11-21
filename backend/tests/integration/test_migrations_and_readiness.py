@@ -42,4 +42,10 @@ def test_migrate_up_down_up_then_ready(make_client):
 
     resp = make_client(TEST_DB_URL).get("/api/v1/ready")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ready", "database": "ok", "migrations": "up_to_date"}
+    body = resp.json()
+    assert {k: body[k] for k in ("status", "database", "migrations")} == {
+        "status": "ready",
+        "database": "ok",
+        "migrations": "up_to_date",
+    }
+    assert body["speech"] in {"ok", "model_missing", "not_installed", "disabled"}

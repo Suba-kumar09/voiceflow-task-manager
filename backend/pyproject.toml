@@ -16,7 +16,13 @@ dependencies = [
 
 [project.optional-dependencies]
 # Local speech-to-text. Optional so the API and tests run without the model.
+# Default engine: Whisper on ONNX Runtime (Microsoft-signed; loads under Smart App Control).
 voice = [
+    "onnxruntime>=1.20",
+    "numpy>=1.26",
+]
+# Alternative engine (VOICEFLOW_STT_PROVIDER=faster-whisper), for servers without Smart App Control.
+voice-ctranslate2 = [
     "faster-whisper>=1.1",
 ]
 dev = [
@@ -63,3 +69,5 @@ known-third-party = ["alembic"]
 "app/services/reminders.py" = ["E501"]  # reminder sentences are clearer unsplit
 "tests/unit/test_intents.py" = ["E501"]  # spoken test phrases
 "tests/integration/test_reports_reminders.py" = ["E501"]  # spoken sentences
+"tests/security/*" = ["E501"]  # readable request payloads
+"evals/*" = ["E501"]  # report table rows

@@ -35,6 +35,16 @@ class LoginThrottle:
             for k in keys:
                 self._prune(k, now).append(now)
 
+    def hit(self, key: str) -> bool:
+        """Count one event; False if the key is already at its limit (used as a rate limit)."""
+        now = self._clock()
+        with self._lock:
+            q = self._prune(key, now)
+            if len(q) >= self._max:
+                return False
+            q.append(now)
+            return True
+
     def reset(self, *keys: str) -> None:
         with self._lock:
             for k in keys:

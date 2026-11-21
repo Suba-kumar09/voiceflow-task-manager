@@ -42,6 +42,20 @@ describe('SystemStatus', () => {
     expect(await screen.findByText('Database migrations need to be applied.')).toBeInTheDocument()
   })
 
+  it('shows the speech recognition state', async () => {
+    mockFetch({
+      '/api/v1/health': { status: 200, body: { status: 'ok' } },
+      '/api/v1/ready': {
+        status: 200,
+        body: { status: 'ready', database: 'ok', migrations: 'up_to_date', speech: 'model_missing' },
+      },
+    })
+    render(<SystemStatus />)
+    expect(
+      await screen.findByText('The speech model is not downloaded. People can type their commands.'),
+    ).toBeInTheDocument()
+  })
+
   it('reports clearly when the backend is not running', async () => {
     mockFetch({ '/api/v1/health': 'network-error' })
     render(<SystemStatus />)

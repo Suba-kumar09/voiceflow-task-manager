@@ -37,7 +37,19 @@ function describeReadiness(r: ReadinessResponse): Check[] {
       : r.migrations === 'pending'
         ? { label: 'Migrations', level: 'warn', detail: 'Database migrations need to be applied.' }
         : { label: 'Migrations', level: 'warn', detail: 'Unknown until the database is available.' }
-  return [db, mig]
+  const speechDetail: Record<NonNullable<ReadinessResponse['speech']>, string> = {
+    ok: 'Voice commands are understood on this server.',
+    disabled: 'Turned off. People can type their commands.',
+    model_missing: 'The speech model is not downloaded. People can type their commands.',
+    not_installed: 'Not installed on the server. People can type their commands.',
+  }
+  if (r.speech === undefined) return [db, mig]
+  const speech: Check = {
+    label: 'Speech recognition',
+    level: r.speech === 'ok' ? 'ok' : 'warn',
+    detail: speechDetail[r.speech],
+  }
+  return [db, mig, speech]
 }
 
 export function SystemStatus() {

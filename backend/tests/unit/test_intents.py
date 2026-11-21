@@ -87,6 +87,11 @@ def test_parse(said, name, slots):
         ("Assign the ready tasks by priority", "project.assign_ready", {}),
         ("a signed the ready tasks", "project.assign_ready", {}),  # misheard "assign"
         (
+            "A sign website testing to Subashini.",
+            "task.assign",
+            {"task": "website testing", "person": "subashini"},
+        ),
+        (
             "assign the ready tasks in the e-commerce project",
             "project.assign_ready",
             {"project": "ecommerce"},
@@ -148,6 +153,13 @@ def test_parse(said, name, slots):
         ("How many tasks were completed today?", "query.completed", {"period": "today"}),
         ("how many tasks got done this week", "query.completed", {"period": "week"}),
         ("open settings", "nav.settings", {}),
+        (
+            "I'm about sixty percent done with the catalog API.",
+            "task.progress",
+            {"task": "catalog api", "percent": "60"},
+        ),
+        ("I'm seventy five percent done", "task.progress", {"task": "", "percent": "75"}),
+        ("a hundred percent done", "task.progress", {"task": "", "percent": "100"}),
         ("show the voice traces", "nav.traces", {}),
         ("approve the extension for the cart API", "extension.approve", {"task": "cart api"}),
         (

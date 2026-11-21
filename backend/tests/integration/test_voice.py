@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models import Task, TaskStatus
-from app.voice.stt import FakeSpeechToText, FasterWhisperProvider, get_stt_provider
+from app.voice.stt import FakeSpeechToText, get_stt_provider
 from tests.integration.test_projects_orchestrator import (
     make_project,
     skilled_world,  # noqa: F401  (fixture)
@@ -189,10 +189,12 @@ SAMPLE = Path(r"D:\voiceflow-spike\audio\test1.wav")
 
 @pytest.mark.skipif(
     not os.environ.get("VOICEFLOW_RUN_STT_TESTS") or not SAMPLE.exists(),
-    reason="set VOICEFLOW_RUN_STT_TESTS=1 (needs the base.en model and the sample recording)",
+    reason="set VOICEFLOW_RUN_STT_TESTS=1 (needs the speech model and the sample recording)",
 )
 def test_real_whisper_transcribes_the_sample_with_name_hints():
-    provider = FasterWhisperProvider("base.en", 4)
+    get_stt_provider.cache_clear()
+    provider = get_stt_provider()  # the configured engine (onnx-whisper by default)
+    assert provider.name != "disabled"
     t = provider.transcribe(SAMPLE.read_bytes(), hints=["Subashini", "Priya", "Arun"])
     assert t.confident
     assert "Subashini" in t.text

@@ -84,6 +84,35 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | U5 | The voice panel is present but shows "Microphone off — voice arrives in the next phase" with a disabled button. | A visual indicator must never imply the microphone is active. |
 | U6 | Task status UNASSIGNED is shown as **Open** (assignee column says "Not assigned"). | Avoids the same words twice in a row. |
 
+## 2026-11-21 — Phase 10: evaluation, hardening and deployment
+
+| # | Decision | Why |
+|---|---|---|
+| R1 | **Default speech engine = Whisper `base.en` on ONNX Runtime** (`app/voice/onnx_whisper.py`, `VOICEFLOW_STT_PROVIDER=onnx-whisper`). int8 encoder + merged decoder with key/value cache from `onnx-community/whisper-base.en` (pinned revision, MIT model), fetched by `python -m app.cli.fetch_stt_model`. Log-mel features, the GPT-2 tokenizer and greedy decoding are plain Python + NumPy. faster-whisper stays as `faster-whisper` (extra `voice-ctranslate2`). | On 2026-11-21 Smart App Control started blocking CTranslate2's unsigned `_ext.pyd` (Code Integrity events 3033/3077), although it loaded at 00:31 the night before: SAC decides unsigned files by cloud reputation, which can change. ONNX Runtime's DLLs and `.pyd` are signed by Microsoft, so they always load. No Windows security setting was changed. |
+| R2 | Same behaviour as before: English, beam 1, no timestamps, names as a prompt, same confidence rule (`no_speech_prob < 0.6`, `avg_logprob > -1.0`). Instead of the VAD filter: clips quieter than −60 dBFS are "please say it again" without running the model, and a repeated-phrase guard stops hallucination loops. | Keep Phase 6 decisions V1/V2 intact. |
+| R3 | psycopg's bundled `libpq` is also blocked by SAC: `scripts/backend-env.ps1` switches psycopg to its pure-Python mode with PostgreSQL's own `libpq.dll`. | Same driver, no setting changed. |
+| R4 | **Voice evaluation** (`evals/`): 38 sentences × 2 Windows voices = 76 recordings, each clean and mixed with office babble (20/10/5 dB SNR) and hiss (10 dB). Results below. | Measured, repeatable (fixed noise seed). |
+| R5 | Hardening: security headers on every response (CSP `default-src 'none'`, `nosniff`, `DENY` framing, `no-referrer`, `no-store` on `/api/v1`, HSTS in production); `/api/docs` off in production; audio bodies read with a size cap (413 before reading it all); **30 voice commands per person per minute** (429). Security tests in `tests/security/`. | CLAUDE.md sections 14 and 16. |
+| R6 | **Retention** (`app/services/retention.py`, worker `python -m app.workers.maintenance`, hourly): voice traces after 30 days (`VOICEFLOW_RETENTION_TRACE_DAYS`), *read* notifications after 90 days, ended sessions and expired voice confirmations after 1 day, idempotency replies after 7 days. **Never deleted:** tasks, projects, history, requests, progress, the reminder log, audit events. Audio is never stored at all. | Traces hold what people said; the audit trail is the authoritative record. |
+| R7 | Backups: `scripts/backup-db.ps1` (compressed dump, newest 14 kept) and `scripts/restore-db.ps1` (restores into a separate check database by default). Tested 2026-11-21: backup restored into `voiceflow_restore_check` and matched the live database exactly (migration 0007, 8 users, 16 tasks, 47 audit events). | Tested restore, not just a dump. |
+| R8 | Monitoring: `/api/v1/ready` now also reports `speech` (`ok`, `model_missing`, `not_installed`, `disabled`) without loading the model; information only — people can still type. | One URL for an uptime monitor. |
+| R9 | Parser: "A sign X to Y" (start of the sentence only) now means "assign", as "a signed" already did. Found by the evaluation. | The only clean-speech miss. |
+
+### Voice evaluation (ONNX engine, this laptop, 2026-11-21)
+
+| Condition | Intent correct | Details correct | Asked to repeat | Wrong change command | Word error rate | Median ms |
+|---|---|---|---|---|---|---|
+| clean | 99% | 96% | 0% | 0 of 76 | 2% | 1344 |
+| office talk 20 dB | 92% | 89% | 1% | 0 of 76 | 5% | 1171 |
+| office talk 10 dB | 88% | 78% | 0% | 0 of 76 | 13% | 1055 |
+| office talk 5 dB | 68% | 57% | 8% | 1 of 76 | 40% | 1151 |
+| hiss 10 dB | 99% | 92% | 0% | 0 of 76 | 4% | 1160 |
+
+(Measured before the R9 fix; the clean miss was "A sign website testing to Subashini".) The one wrong
+change command (5 dB: "Start the E-Commerce … project in ISA" → `task.start`) is still read back and
+needs a spoken "yes", so nothing changes by mistake. Typical noise errors are extra words added at
+the end ("Yes, we're done."), which the parser rejects → "please say it again".
+
 ## 2026-11-21 — Phase 9: manager insights, reminders and spoken notifications
 
 | # | Decision | Why |
