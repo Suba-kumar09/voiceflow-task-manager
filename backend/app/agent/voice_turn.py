@@ -17,6 +17,7 @@ from app.auth.principal import Principal
 from app.models import ProjectStatus, Task
 from app.services import notifications as notes
 from app.services import projects as project_svc
+from app.services import reports
 from app.services.errors import DomainError
 from app.services.tasks import service as task_svc
 
@@ -98,8 +99,9 @@ def _is_manager(p: Principal) -> bool:
 def _help(p: Principal) -> str:
     if _is_manager(p):
         return (
-            "You can say: open the E-Commerce project, show the project team, show tasks, "
-            "what is still pending, read my notifications, read this page, or go back."
+            "You can say: give me today's summary, who has overdue tasks, who is overloaded, "
+            "open the E-Commerce project, what is still pending, approve it, "
+            "assign the ready tasks, read my notifications, or go back."
         )
     return (
         "You can say: what's my task, read my notifications, open my work, "
@@ -186,6 +188,16 @@ def handle_text(
     if name == "nav.notifications":
         return TurnResult(
             intent, "ok", "Opening notifications.", {"type": "navigate", "to": "/notifications"}
+        )
+    if name == "nav.settings":
+        return TurnResult(
+            intent, "ok", "Opening settings.", {"type": "navigate", "to": "/settings"}
+        )
+    if name == "nav.traces":
+        if not p.is_admin:
+            return TurnResult(intent, "denied", "Voice traces are for administrators.")
+        return TurnResult(
+            intent, "ok", "Opening voice traces.", {"type": "navigate", "to": "/traces"}
         )
     if name == "nav.system":
         return TurnResult(
@@ -311,6 +323,18 @@ def handle_text(
             _pending_speech(prog),
             {"type": "navigate", "to": _project_route(project.id, None)},
         )
+
+    if name in ("query.summary", "query.overdue", "query.workload", "query.completed"):
+        if not manager:
+            return TurnResult(intent, "denied", "Team reports are for managers. " + _help(p))
+        s = reports.summary(db, p, intent.slots.get("period", "today"))
+        speech = {
+            "query.summary": reports.summary_speech,
+            "query.overdue": reports.overdue_speech,
+            "query.workload": reports.workload_speech,
+            "query.completed": reports.completed_speech,
+        }[name](s)
+        return TurnResult(intent, "ok", speech)
 
     if name == "read_page":
         if page_summary and page_summary.strip():

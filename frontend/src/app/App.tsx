@@ -8,8 +8,10 @@ import { SignInPage } from '../features/auth/SignInPage'
 import { NotificationsPage } from '../features/notifications/NotificationsPage'
 import { ProjectPage } from '../features/projects/ProjectPage'
 import { ProjectsPage } from '../features/projects/ProjectsPage'
+import { SettingsPage } from '../features/settings/SettingsPage'
 import { SystemStatus } from '../features/system/SystemStatus'
 import { TeamPage } from '../features/team/TeamPage'
+import { TracesPage } from '../features/traces/TracesPage'
 import { MyWorkPage } from '../features/work/MyWorkPage'
 import { ApiError } from '../services/api'
 import { AppShell } from './AppShell'
@@ -54,6 +56,8 @@ function Gate() {
           <Route path="/team" element={<TeamPage />} />
           <Route path="/my-work" element={<MyWorkPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          {state.me.role === 'ADMIN' && <Route path="/traces" element={<TracesPage />} />}
           <Route
             path="/system"
             element={

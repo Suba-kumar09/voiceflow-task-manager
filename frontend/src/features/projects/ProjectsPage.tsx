@@ -5,6 +5,7 @@ import { Empty, ErrorBox, Loading, ProgressBar } from '../../components/ui/State
 import { projectsApi, type Project } from '../../services/api'
 import { usePageSummary } from '../../voice/pageSummary'
 import { useMe } from '../auth/auth-context'
+import { TeamToday } from '../reports/TeamToday'
 import { ProjectBadge } from '../tasks/Badges'
 
 function Flag({ children, tone }: { children: React.ReactNode; tone: string }) {
@@ -95,6 +96,8 @@ export function ProjectsPage() {
           </div>
         ))}
       </div>
+
+      <TeamToday />
 
       {projects.isLoading && <Loading label="Loading projects…" />}
       {projects.isError && <ErrorBox error={projects.error} />}

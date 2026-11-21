@@ -138,6 +138,17 @@ def test_parse(said, name, slots):
         ("Approve the extension", "extension.approve", {"task": ""}),
         ("Approved the extension.", "extension.approve", {"task": ""}),  # real mishearing
         ("Approved it.", "task.approve", {"task": ""}),
+        ("Give me today's summary", "query.summary", {"period": "today"}),
+        ("what's the weekly report", "query.summary", {"period": "week"}),
+        ("how is my team doing this week", "query.summary", {"period": "week"}),
+        ("Who has overdue tasks?", "query.overdue", {}),
+        ("what is overdue", "query.overdue", {}),
+        ("Who is overloaded?", "query.workload", {}),
+        ("who is free right now", "query.workload", {}),
+        ("How many tasks were completed today?", "query.completed", {"period": "today"}),
+        ("how many tasks got done this week", "query.completed", {"period": "week"}),
+        ("open settings", "nav.settings", {}),
+        ("show the voice traces", "nav.traces", {}),
         ("approve the extension for the cart API", "extension.approve", {"task": "cart api"}),
         (
             "Deny the extension because the launch date is fixed",

@@ -240,6 +240,30 @@ def parse(text: str) -> Intent:
         return change
 
     # --- read-only questions --------------------------------------------------------
+    week = bool(re.search(r"\b(?:this week|weekly|the week)\b", t))
+    period = {"period": "week" if week else "today"}
+    if _m(
+        r"(?:give me |read |what(?:'s| is) |tell me |read me )?(?:the |my )?(?:today's |daily |this week's |weekly |team )?"
+        r"(?:summary|digest|report|status report|update|team update)(?: for (?:today|this week))?|"
+        r"how is (?:my |the )?team doing(?: today| this week)?|team status",
+        t,
+    ):
+        return Intent("query.summary", period)
+    if _m(
+        r"(?:who has |what is |what's |are there |any |show )?(?:the )?overdue(?: tasks| work)?|what(?:'s| is) overdue|who is late|what is late",
+        t,
+    ):
+        return Intent("query.overdue")
+    if _m(
+        r"who(?:'s| is) (?:overloaded|free|busy|available)(?: right now| right| now)?|who has (?:capacity|room|time)|(?:team |the )?workload|who can take (?:more|another task)",
+        t,
+    ):
+        return Intent("query.workload")
+    if _m(
+        r"how many tasks (?:were |have been |got )?(?:completed|finished|done)(?: today| this week)?",
+        t,
+    ):
+        return Intent("query.completed", period)
     if _m(
         r"(?:what(?:'s| is)|tell me) my (?:current |next )?task|what should i (?:do|work on)(?: now| next)?|"
         r"what am i (?:doing|working on)|what do i (?:have to|need to) do(?: now| today)?",
@@ -274,6 +298,13 @@ def parse(text: str) -> Intent:
         return Intent("nav.my_work")
     if _m(rf"(?:{_NAV} )?(?:my |the )?notifications?(?: page)?", t):
         return Intent("nav.notifications")
+    if _m(
+        rf"(?:{_NAV} )?(?:my |the )?(?:settings|preferences|notification settings|voice settings)(?: page)?",
+        t,
+    ):
+        return Intent("nav.settings")
+    if _m(rf"(?:{_NAV} )?(?:the )?(?:voice |agent )?traces?(?: page)?", t):
+        return Intent("nav.traces")
     if _m(rf"(?:{_NAV} )?(?:the )?system status(?: page)?", t):
         return Intent("nav.system")
     if _m(rf"(?:{_NAV} )?(?:all |my |the )*projects(?: page| list)?", t):

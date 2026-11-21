@@ -84,6 +84,17 @@ Each entry: what was decided, why, and when. Newest last. Owner approval noted w
 | U5 | The voice panel is present but shows "Microphone off — voice arrives in the next phase" with a disabled button. | A visual indicator must never imply the microphone is active. |
 | U6 | Task status UNASSIGNED is shown as **Open** (assignee column says "Not assigned"). | Avoids the same words twice in a row. |
 
+## 2026-11-21 — Phase 9: manager insights, reminders and spoken notifications
+
+| # | Decision | Why |
+|---|---|---|
+| R1 | **One report service** (`app/services/reports.py`) feeds the Team today card, the voice answers and the daily digest: completed (from status history), in progress, awaiting review, blocked, overdue, due in 24 h, and workload per person (free / has room / at limit / overloaded, against each person's WIP limit). Managers see their teams, admins the organisation, employees get 403. Every answer states the period and time zone. | CLAUDE.md 4.11: database-grounded, no fabricated numbers. |
+| R2 | Voice: "give me today's summary", "weekly report", "who has overdue tasks", "who is overloaded / free", "how many tasks were completed this week". Read-only, so no confirmation. | Hands-free status. |
+| R3 | **Reminders worker** (`python -m app.workers.reminders`, every 60 s; `--once` for one pass): due soon (24 h) and overdue for the assignee; overdue also to the team's managers; a daily digest to managers after 09:00 local time. Each one is recorded in `reminder_log` (unique user, kind, key), so it is sent **at most once**, even with two workers. A moved deadline is a new key, so a fresh reminder follows. | CLAUDE.md 13: no duplicate reminders, auditable. |
+| R4 | **Quiet hours** per user (organisation time zone, may cross midnight): reminders are held, not dropped, and sent on the first pass after quiet hours end. | Respect people's time without losing alerts. |
+| R5 | **Spoken notifications** in the browser: only notifications that arrive *after* the app opens; only if enabled, not in quiet hours (computed by the server), and only while the assistant is idle and not muted. Several at once are batched into one short sentence. | Voice-first without talking over the user or replaying history. |
+| R6 | Settings page (spoken notifications, quiet hours); admin-only Voice traces page over the existing traces endpoint; "open settings" / "show voice traces" by voice. | Accessible controls; traceability. |
+
 ## 2026-11-21 — Phase 8: extensions, declining and progress
 
 | # | Decision | Why |

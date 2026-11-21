@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from 'react'
 
 import { useMe } from '../features/auth/auth-context'
 import type { TextToSpeech } from './tts'
+import { useAnnouncements } from './useAnnouncements'
 import { useVoice, type VoicePhase } from './useVoice'
 
 const PHASE: Record<VoicePhase, { label: string; color: string }> = {
@@ -16,7 +17,7 @@ const PHASE: Record<VoicePhase, { label: string; color: string }> = {
   unavailable: { label: 'Microphone unavailable', color: '#f87171' },
 }
 
-const MANAGER_HINTS = ['What is still pending?', 'Approve it', 'Assign the ready tasks by priority', 'Read my notifications']
+const MANAGER_HINTS = ['Give me today’s summary', 'Who has overdue tasks?', 'Who is overloaded?', 'What is still pending?', 'Approve it', 'Assign the ready tasks by priority']
 const EMPLOYEE_HINTS = ['What’s my task?', 'I’ve started my task', 'I’m halfway done', 'I need more time', 'I’ve completed my task']
 
 function MicIcon({ off }: { off?: boolean }) {
@@ -42,6 +43,7 @@ function MicIcon({ off }: { off?: boolean }) {
 export function VoicePanel({ tts }: { tts?: TextToSpeech }) {
   const me = useMe()
   const v = useVoice(tts)
+  useAnnouncements(v.announce)
   const [typing, setTyping] = useState(false)
   const [text, setText] = useState('')
   const inputId = useId()

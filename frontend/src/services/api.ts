@@ -206,6 +206,9 @@ export interface AppNotification {
     | 'EXTENSION_REQUESTED'
     | 'EXTENSION_APPROVED'
     | 'EXTENSION_DENIED'
+    | 'DUE_SOON'
+    | 'OVERDUE'
+    | 'DAILY_DIGEST'
   title: string
   body: string
   task_id: string | null
@@ -451,4 +454,85 @@ export const notificationsApi = {
   list: () => request<NotificationPage>('/api/v1/notifications?limit=100'),
   markRead: (id: string) =>
     request<void>(`/api/v1/notifications/${q(id)}/read`, { method: 'POST' }),
+}
+
+// ---------------------------------------------------------------- reports, preferences, traces
+export interface ReportTaskLine {
+  id: string
+  key: string | null
+  title: string
+  assignee: string | null
+  due_at: string | null
+  status: TaskStatus
+}
+
+export interface PersonLoad {
+  id: string
+  name: string
+  active: number
+  limit: number
+  state: 'free' | 'has capacity' | 'at limit' | 'overloaded'
+}
+
+export interface TeamSummary {
+  period: 'today' | 'week'
+  period_label: string
+  timezone: string
+  start: string
+  completed: number
+  in_progress: number
+  blocked: number
+  awaiting_review: number
+  open_unassigned: number
+  overdue: ReportTaskLine[]
+  due_soon: ReportTaskLine[]
+  people: PersonLoad[]
+  spoken: string
+}
+
+export const reportsApi = {
+  teamSummary: (period: 'today' | 'week' = 'today') =>
+    request<TeamSummary>(`/api/v1/reports/team-summary?period=${period}`),
+}
+
+export interface Preferences {
+  voice_announcements: boolean
+  quiet_start: string | null // "HH:MM:SS", organisation time zone
+  quiet_end: string | null
+  timezone: string
+  quiet_now: boolean
+}
+
+export interface PreferencesUpdate {
+  voice_announcements?: boolean
+  quiet_start?: string
+  quiet_end?: string
+  clear_quiet_hours?: boolean
+}
+
+export const preferencesApi = {
+  get: () => request<Preferences>('/api/v1/users/me/preferences'),
+  update: (body: PreferencesUpdate) =>
+    request<Preferences>('/api/v1/users/me/preferences', { method: 'PATCH', body }),
+}
+
+export interface TraceRow {
+  id: string
+  at: string
+  user: string
+  channel: string
+  transcript: string | null
+  intent: string | null
+  slots: Record<string, unknown> | null
+  tool: string | null
+  outcome: string
+  steps: Array<Record<string, unknown>> | null
+  speech: string | null
+  error: string | null
+  stt_ms: number | null
+  total_ms: number | null
+}
+
+export const tracesApi = {
+  list: () => request<TraceRow[]>('/api/v1/voice/traces?limit=100'),
 }

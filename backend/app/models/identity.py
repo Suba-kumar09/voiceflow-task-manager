@@ -3,6 +3,7 @@
 import enum
 import uuid
 from datetime import datetime
+from datetime import time as dtime
 
 from sqlalchemy import (
     Boolean,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Time,
     UniqueConstraint,
     func,
     text,
@@ -82,6 +84,12 @@ class User(Base):
     wip_limit: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
     )
+    # Notification preferences (Phase 9). Quiet hours are in the organisation's time zone.
+    voice_announcements: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    quiet_start: Mapped[dtime | None] = mapped_column(Time)
+    quiet_end: Mapped[dtime | None] = mapped_column(Time)
 
     memberships: Mapped[list["TeamMembership"]] = relationship(back_populates="user")
 

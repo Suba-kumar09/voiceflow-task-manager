@@ -88,6 +88,25 @@ class NotificationKind(enum.StrEnum):
     EXTENSION_REQUESTED = "EXTENSION_REQUESTED"
     EXTENSION_APPROVED = "EXTENSION_APPROVED"
     EXTENSION_DENIED = "EXTENSION_DENIED"
+    DUE_SOON = "DUE_SOON"
+    OVERDUE = "OVERDUE"
+    DAILY_DIGEST = "DAILY_DIGEST"
+
+
+class ReminderLog(Base):
+    """One row per reminder actually sent, so the worker never sends the same one twice.
+    `key` identifies the occasion, e.g. "<task id>:<due date>" or "digest:<local date>"."""
+
+    __tablename__ = "reminder_log"
+    __table_args__ = (UniqueConstraint("user_id", "kind", "key", name="uq_reminder_log_once"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = _fk("users.id")
+    kind: Mapped[NotificationKind] = mapped_column(
+        str_enum(NotificationKind, "reminder_kind"), nullable=False
+    )
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
 
 
 class Notification(Base):

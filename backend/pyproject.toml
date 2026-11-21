@@ -59,4 +59,7 @@ known-third-party = ["alembic"]
 "app/agent/intents.py" = ["E501"]  # spoken-command patterns are clearer unsplit
 "app/agent/harness.py" = ["E501"]  # spoken sentence templates are clearer unsplit
 "app/services/requests.py" = ["E501"]  # notification sentences are clearer unsplit
+"app/services/reports.py" = ["E501"]  # spoken report sentences are clearer unsplit
+"app/services/reminders.py" = ["E501"]  # reminder sentences are clearer unsplit
 "tests/unit/test_intents.py" = ["E501"]  # spoken test phrases
+"tests/integration/test_reports_reminders.py" = ["E501"]  # spoken sentences

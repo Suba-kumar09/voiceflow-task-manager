@@ -5,7 +5,7 @@ orchestrator assigns all eligible tasks, and employees receive and update work b
 `CLAUDE.md` is the product and engineering source of truth; `docs/decisions.md` records
 decisions and measurements.
 
-**Status:** Phase 8 — the full employee voice workflow: deadline extension requests (with
+**Status:** Phase 9 — manager team reports by voice and on screen, a reminders worker (due soon, overdue, daily digest; sent once; quiet hours), spoken notifications, settings and an admin voice-traces page. Before that, Phase 8 — the full employee voice workflow: deadline extension requests (with
 spoken dates) decided by managers, declining, and progress updates — on top of Phase 7's
 voice commands that change data (complete, start, blocked, approve, send back, assign ready
 tasks, assign to a person, start project) through the execution harness with read-back and
@@ -74,3 +74,8 @@ cd backend
 cd frontend
 npm run typecheck; npm run lint; npm test; npm run build
 ```
+
+
+## Reminders worker
+
+Run alongside the API (from `backend/`): `.venv\Scripts\python.exe -m app.workers.reminders` (every 60 s) or `--once` for a single pass. Safe to run more than one copy.

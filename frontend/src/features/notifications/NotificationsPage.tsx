@@ -21,6 +21,9 @@ const dot: Record<AppNotification['kind'], string> = {
   EXTENSION_REQUESTED: '#38bdf8',
   EXTENSION_APPROVED: '#4ade80',
   EXTENSION_DENIED: '#fb923c',
+  DUE_SOON: '#fbbf24',
+  OVERDUE: '#f87171',
+  DAILY_DIGEST: '#38bdf8',
 }
 
 export function NotificationsPage() {

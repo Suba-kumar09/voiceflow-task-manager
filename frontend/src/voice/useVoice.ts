@@ -164,9 +164,21 @@ export function useVoice(tts: TextToSpeech = defaultSpeech) {
     })
   }, [tts])
 
+  /** Speak an unprompted announcement (e.g. a new notification). Only when idle and not muted. */
+  const announce = useCallback(
+    (text: string) => {
+      if (muted || phase !== 'ready' || !text) return false
+      setCaptions({ bot: text })
+      setSuggestions([])
+      void say(text, 'ready')
+      return true
+    },
+    [muted, phase, say],
+  )
+
   return useMemo(
-    () => ({ phase, muted, level, captions, suggestions, problem, checks, plan, awaiting, sendText, toggleListening, toggleMute, speechAvailable: tts.available }),
-    [phase, muted, level, captions, suggestions, problem, checks, plan, awaiting, sendText, toggleListening, toggleMute, tts.available],
+    () => ({ phase, muted, level, captions, suggestions, problem, checks, plan, awaiting, sendText, toggleListening, toggleMute, announce, speechAvailable: tts.available }),
+    [phase, muted, level, captions, suggestions, problem, checks, plan, awaiting, sendText, toggleListening, toggleMute, announce, tts.available],
   )
 }
 

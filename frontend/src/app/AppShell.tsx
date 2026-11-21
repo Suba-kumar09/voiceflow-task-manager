@@ -16,6 +16,8 @@ const ICONS = {
   work: 'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0',
   status: 'M22 12h-4l-3 9L9 3l-3 9H2',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6 M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 7.4 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 2.6 14H2.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 7.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 10 2.6V2.5a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.6 1.4 1.65 1.65 0 0 1 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21.4 10h.1a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-2 1z',
+  traces: 'M4 6h16 M4 12h10 M4 18h6 M18 14l3 3-3 3',
 }
 
 const roleLabel = { ADMIN: 'Administrator', MANAGER: 'Manager', EMPLOYEE: 'Employee' } as const
@@ -106,6 +108,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </>
           )}
           <NavItem to="/notifications" icon={ICONS.bell} label="Notifications" badge={unread} />
+          <NavItem to="/settings" icon={ICONS.settings} label="Settings" />
+          {me.role === 'ADMIN' && <NavItem to="/traces" icon={ICONS.traces} label="Voice traces" />}
           <NavItem to="/system" icon={ICONS.status} label="System status" />
         </nav>
 

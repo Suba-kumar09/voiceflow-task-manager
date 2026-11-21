@@ -14,6 +14,7 @@ from app.models.identity import (
 from app.models.planning import (
     Notification,
     NotificationKind,
+    ReminderLog,
     Skill,
     TaskDependency,
     TaskRequiredSkill,
@@ -38,6 +39,7 @@ from app.models.tasks import (
 )
 
 __all__ = [
+    "ReminderLog",
     "DeadlineExtensionRequest",
     "ExtensionStatus",
     "TaskProgressUpdate",

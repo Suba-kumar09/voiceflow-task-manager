@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-import type { Me, NotificationPage, PlanItem, Progress, Project, Task } from '../services/api'
+import type { Me, NotificationPage, PlanItem, Preferences, Progress, Project, Task, TeamSummary } from '../services/api'
 
 export type Handler = (init: RequestInit | undefined) => { status: number; body?: unknown }
 
@@ -109,6 +109,33 @@ export const plan: PlanItem[] = [
 
 export const noNotes: NotificationPage = { items: [], total: 0, unread: 0, limit: 100, offset: 0 }
 
+export const prefs: Preferences = {
+  voice_announcements: true,
+  quiet_start: null,
+  quiet_end: null,
+  timezone: 'Asia/Kolkata',
+  quiet_now: false,
+}
+
+export const teamSummary: TeamSummary = {
+  period: 'today',
+  period_label: 'today',
+  timezone: 'Asia/Kolkata',
+  start: '2026-11-20T18:30:00Z',
+  completed: 2,
+  in_progress: 3,
+  blocked: 1,
+  awaiting_review: 1,
+  open_unassigned: 4,
+  overdue: [{ id: 'o1', key: 'EC04', title: 'Cart API', assignee: 'Arun', due_at: '2026-11-20T12:30:00Z', status: 'IN_PROGRESS' }],
+  due_soon: [],
+  people: [
+    { id: 'u-aru', name: 'Arun', active: 2, limit: 1, state: 'overloaded' },
+    { id: 'u-pri', name: 'Priya', active: 0, limit: 1, state: 'free' },
+  ],
+  spoken: 'Today (Asia/Kolkata time), 2 tasks were completed.',
+}
+
 export const page = <T,>(items: T[]) => ({ items, total: items.length, limit: 200, offset: 0 })
 
 /** Calls every signed-in screen makes (sidebar projects + notification badge). */
@@ -116,6 +143,9 @@ export function shellRoutes(me: Me): Record<string, Handler> {
   return {
     'GET /api/v1/users/me': ok(me),
     'GET /api/v1/notifications?limit=100': ok(noNotes),
-    ...(me.role === 'EMPLOYEE' ? {} : { 'GET /api/v1/projects': ok([project]) }),
+    'GET /api/v1/users/me/preferences': ok(prefs),
+    ...(me.role === 'EMPLOYEE'
+      ? {}
+      : { 'GET /api/v1/projects': ok([project]), 'GET /api/v1/reports/team-summary?period=today': ok(teamSummary) }),
   }
 }
