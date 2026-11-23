@@ -164,7 +164,10 @@ def resolve_task(
         if len(local) == 1:
             return local[0]
         if not local:
-            raise Stop("clarify", f"You have no {what} right now.")
+            tip = ""
+            if mine and (p.is_admin or p.managed_team_ids):
+                tip = " To accept finished work from your team, say: approve it."
+            raise Stop("clarify", f"You have no {what} right now.{tip}")
         names = ", ".join(t.title for t in local[:4])
         raise Stop("clarify", f"Which one? {names}.", suggestions=[t.title for t in local[:3]])
     found = _match(hint, tasks, _task_label) or _match(hint, tasks, lambda t: t.external_key or "")

@@ -142,14 +142,32 @@ export function VoicePanel({ tts }: { tts?: TextToSpeech }) {
               <span className="text-xs text-ink-faint">or say “yes” / “cancel”. Nothing changes until you confirm.</span>
             </div>
           )}
-          {!v.captions.you && !v.captions.bot && !v.problem && (
+          {v.needsTap && !v.muted && v.handsFree && (
+            <p role="alert" className="mt-1 text-sm font-medium text-warn">
+              Click anywhere on the page once to start hands-free listening.
+            </p>
+          )}
+          {!v.captions.you && !v.captions.bot && !v.problem && !v.needsTap && (
             <p className="mt-1 text-sm text-ink-muted">
-              {v.muted ? 'Voice is muted. Unmute to talk.' : 'Press the microphone and speak. It stops by itself when you pause.'}
+              {v.muted
+                ? 'Voice is muted. Unmute to talk.'
+                : v.handsFree
+                  ? 'Just speak — I’m listening. Say “help” to hear what you can say.'
+                  : 'Press the microphone and speak. It stops by itself when you pause.'}
             </p>
           )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={v.toggleHandsFree}
+            aria-pressed={v.handsFree}
+            title={v.handsFree ? 'The microphone opens by itself. Click to use the button instead.' : 'Click to let the microphone open by itself.'}
+            className={`h-9 rounded-lg border px-3 text-sm font-medium ${v.handsFree ? 'border-accent bg-accent/15 text-accent-strong' : 'border-control-line bg-control text-ink hover:border-ink-faint'}`}
+          >
+            Hands-free: {v.handsFree ? 'On' : 'Off'}
+          </button>
           <button type="button" onClick={() => setTyping((t) => !t)} aria-expanded={typing} className="h-9 rounded-lg border border-control-line bg-control px-3 text-sm font-medium text-ink hover:border-ink-faint">
             Type instead
           </button>

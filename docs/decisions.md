@@ -184,3 +184,13 @@ Smart App Control **on**, internet via mobile hotspot.
 - **STT = faster-whisper `base.en`** behind the `SpeechToTextProvider` adapter, with VAD and
   a team-name hint.
 - Every new native dependency must be checked against Smart App Control right after install.
+
+## 2026-11-23 — Hands-free listening and everyday commands (owner request)
+
+| # | Decision | Why |
+|---|---|---|
+| H1 | **Hands-free mode, on by default** (switch "Hands-free: On/Off" on the voice panel, remembered per browser). After sign-in the microphone opens by itself, waits for speech, sends one sentence when the speaker pauses (~1.2 s), speaks the answer, then opens again. It is closed while VoiceFlow talks, so it never hears itself. Replaces Phase 6 V3 "records only after pressing the microphone" for people who leave hands-free on. | Owner: "whatever I say it should do, without clicking the mic". |
+| H2 | While waiting, audio stays in the browser: only ~0.5 s before the first word is kept, sounds shorter than 0.2 s (clicks) are ignored, and nothing is sent until someone speaks. Audio is still never stored on the server. | Privacy and server load with an always-open microphone. |
+| H3 | A sentence that is not a command, or is unclear, is shown as "Not a command, so I ignored it" and **not answered aloud** in hands-free mode. Changes still need a spoken "yes". | Other people talking nearby must not trigger replies or changes. |
+| H4 | Browsers allow microphone/sound only after one click or key press on the page; after a reload the panel asks for one click anywhere. | Browser autoplay rule; cannot be bypassed. |
+| H5 | Everyday phrases: "open project" / "show tasks" use the project on screen, else the only active project; "mark as complete", "complete my task", "finish X" complete the current task (read back, then "yes"); "open Arun", "show me Arun", "Arun's tasks" open the project Team tab with that person highlighted and say what they are working on (managers only; ambiguous names are asked, never guessed). | Owner reported these did nothing useful. |

@@ -82,6 +82,30 @@ def test_unknown_and_ambiguous_projects_ask_instead_of_guessing(as_user, skilled
     assert r["speech"].startswith("I couldn't find a project called spaceship.")
 
 
+def test_open_project_and_tasks_without_naming_the_only_project(as_user, skilled_world):  # noqa: F811
+    mgr, project, _ = started_project(as_user, skilled_world)
+    here = f"/projects/{project['id']}"
+    for said in ("open project", "open the project"):
+        assert say(mgr, said)["action"] == {"type": "navigate", "to": here}
+    for said in ("show tasks", "open the tasks tab"):
+        assert say(mgr, said)["action"]["to"] == f"{here}?tab=tasks"
+
+
+def test_open_a_person_shows_them_on_the_project_team(as_user, skilled_world):  # noqa: F811
+    mgr, project, _ = started_project(as_user, skilled_world)
+    person = str(skilled_world["emp_web_2"])
+    for said in ("open emp web 2", "show me Emp Web 2", "open emp web 2's tasks"):
+        r = say(mgr, said)
+        assert r["intent"] == "nav.person" and r["outcome"] == "ok", said
+        assert r["action"]["to"] == f"/projects/{project['id']}?tab=team&person={person}"
+        assert r["speech"].startswith("Emp Web 2 ")
+    # "Emp" alone matches two people: never guess.
+    assert say(mgr, "open emp")["intent"] != "nav.person"
+    # Employees and other organisations cannot look people up.
+    assert say(as_user("emp_web_1"), "open emp web 2")["action"] is None
+    assert say(as_user("manager_b"), "open emp web 2")["action"] is None
+
+
 def test_other_organisations_projects_are_invisible(as_user, skilled_world):  # noqa: F811
     started_project(as_user, skilled_world)
     r = say(as_user("manager_b"), "open the e-commerce project")

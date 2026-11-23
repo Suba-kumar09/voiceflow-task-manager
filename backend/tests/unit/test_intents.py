@@ -86,6 +86,13 @@ def test_parse(said, name, slots):
         ),
         ("Assign the ready tasks by priority", "project.assign_ready", {}),
         ("a signed the ready tasks", "project.assign_ready", {}),  # misheard "assign"
+        ("mark as complete", "task.complete", {"task": ""}),
+        ("mark it as done", "task.complete", {"task": ""}),
+        ("complete my task", "task.complete", {"task": ""}),
+        ("finish website testing", "task.complete", {"task": "website testing"}),
+        ("show the tasks tab", "nav.project_tab", {"tab": "tasks"}),
+        ("show me arun", "nav.project", {"project": "arun"}),
+        ("open arun's page", "nav.project", {"project": "arun"}),
         (
             "A sign website testing to Subashini.",
             "task.assign",

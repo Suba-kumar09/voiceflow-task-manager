@@ -121,6 +121,75 @@ def _which_project(p: Principal, db: Session, candidates=None) -> TurnResult:
     )
 
 
+_GENERIC_PROJECT = {"", "it", "this", "that", "my", "our", "current"}
+
+
+def _default_project(db: Session, p: Principal, path: str | None):
+    """The project meant when none is named: the one on screen, else the only active one,
+    else the only one. None if there is a real choice to make."""
+    pid = _current_project_id(path)
+    if pid is not None:
+        return project_svc.load_project(db, p, pid, manage=False)
+    projects = project_svc.list_projects(db, p)
+    active = [x for x in projects if x.status is ProjectStatus.ACTIVE]
+    if len(active) == 1:
+        return active[0]
+    return projects[0] if len(projects) == 1 else None
+
+
+def _first(name: str) -> str:
+    return _compact(name.split()[0]) if name.split() else ""
+
+
+def resolve_person(db: Session, p: Principal, spoken: str, path: str | None):
+    """A spoken first or full name among the people in the manager's projects.
+    Returns (person dict from project_team, project) or (None, None)."""
+    q = _compact(spoken)
+    if not q:
+        return None, None
+    projects = project_svc.list_projects(db, p)
+    here = _current_project_id(path)
+    projects.sort(key=lambda x: (x.id != here, x.status is not ProjectStatus.ACTIVE))
+    for project in projects:
+        team = project_svc.project_team(db, p, project.id)
+        exact = [m for m in team if q in (_compact(m["display_name"]), _first(m["display_name"]))]
+        if len(exact) == 1:
+            return exact[0], project
+        close = [
+            m
+            for m in team
+            if max(
+                difflib.SequenceMatcher(None, q, _compact(m["display_name"])).ratio(),
+                difflib.SequenceMatcher(None, q, _first(m["display_name"])).ratio(),
+            )
+            >= 0.8
+        ]
+        if len(close) == 1:
+            return close[0], project
+    return None, None
+
+
+def _person_turn(person: dict, project) -> TurnResult:
+    name = person["display_name"]
+    cur = person["current_task"]
+    if person["membership_role"] == "MANAGER":
+        speech = f"Showing {name}, the team's manager."
+    elif cur:
+        state = {"IN_PROGRESS": "in progress", "BLOCKED": "blocked"}.get(cur["status"], "assigned")
+        speech = (
+            f"{name} is working on {cur['title']}, {state}. "
+            f"{person['active_tasks']} of {person['wip_limit']} active tasks."
+        )
+    else:
+        speech = f"{name} has nothing assigned right now and has room for more work."
+    return TurnResult(
+        Intent("nav.person", {"person": name}),
+        "ok",
+        speech,
+        {"type": "navigate", "to": f"/projects/{project.id}?tab=team&person={person['id']}"},
+    )
+
+
 def _pending_speech(prog: dict) -> str:
     parts = [f"{_display(prog['name'])}: {prog['completed']} of {prog['total']} tasks are done."]
     detail = []
@@ -222,7 +291,10 @@ def handle_text(
                 return TurnResult(
                     intent, "ok", "Opening your work.", {"type": "navigate", "to": "/my-work"}
                 )
-            return _which_project(p, db)
+            only = _default_project(db, p, path)
+            if only is None:
+                return _which_project(p, db)
+            pid = only.id
         if tab == "team" and not manager:
             return TurnResult(intent, "denied", "Only managers can see the team’s workload.")
         label = {"team": "the project team", "tasks": "the tasks", "overview": "the overview"}[tab]
@@ -231,7 +303,24 @@ def handle_text(
         )
 
     if name == "nav.project":
-        project, ambiguous = resolve_project(db, p, intent.slots["project"])
+        spoken = intent.slots["project"]
+        if _compact(spoken) in _GENERIC_PROJECT:  # "open the project", "open this project"
+            project, ambiguous = _default_project(db, p, path), []
+            if project is None:
+                return _which_project(p, db)
+        else:
+            project, ambiguous = resolve_project(db, p, spoken)
+        if project is None and not ambiguous:
+            # Not a project: maybe a person ("open Arun", "show me Priya", "Arun's tasks").
+            if not manager:
+                return TurnResult(
+                    intent,
+                    "clarify",
+                    f"I couldn't find {spoken}. You can open your work or your notifications.",
+                )
+            person, where = resolve_person(db, p, spoken, path)
+            if person is not None:
+                return _person_turn(person, where)
         if project is None:
             if ambiguous:
                 return _which_project(p, db, ambiguous)

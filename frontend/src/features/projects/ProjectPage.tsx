@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 
 import { Avatar, Unassigned } from '../../components/ui/Avatar'
@@ -203,18 +203,29 @@ function TasksTab({ tasks }: { tasks: Task[] }) {
   )
 }
 
-function TeamTab({ projectId }: { projectId: string }) {
+function TeamTab({ projectId, highlight }: { projectId: string; highlight: string | null }) {
   const team = useQuery({ queryKey: ['team', projectId], queryFn: () => projectsApi.team(projectId) })
+  const picked = useRef<HTMLElement | null>(null)
+  // "Open Arun": bring that person's card into view.
+  useEffect(() => {
+    picked.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [highlight, team.data])
   if (team.isLoading) return <Loading label="Loading team…" />
   if (team.isError) return <ErrorBox error={team.error} />
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
       {(team.data ?? []).map((m) => {
+        const isPicked = m.id === highlight
         const full = m.wip_limit > 0 && m.active_tasks >= m.wip_limit
         const state = m.membership_role === 'MANAGER' ? 'Manager' : m.current_task?.status === 'BLOCKED' ? 'Blocked' : m.active_tasks ? 'Busy' : 'Available'
         const tone = state === 'Available' ? 'bg-[rgba(34,197,94,.14)] text-[#4ade80]' : state === 'Blocked' ? 'bg-[rgba(248,113,113,.15)] text-[#fca5a5]' : state === 'Busy' ? 'bg-[rgba(56,189,248,.14)] text-[#7dd3fc]' : 'bg-[rgba(148,163,184,.12)] text-[#cbd5e1]'
         return (
-          <article key={m.id} className="flex flex-col gap-3 rounded-2xl border border-line bg-panel p-4">
+          <article
+            key={m.id}
+            ref={isPicked ? picked : undefined}
+            aria-current={isPicked ? 'true' : undefined}
+            className={`flex flex-col gap-3 rounded-2xl border bg-panel p-4 ${isPicked ? 'border-accent ring-2 ring-accent/60' : 'border-line'}`}
+          >
             <div className="flex items-center gap-3">
               <Avatar name={m.display_name} seed={m.id} size={44} />
               <div className="min-w-0 flex-1">
@@ -319,7 +330,7 @@ export function ProjectPage() {
       {(progress.isError || tasks.isError) && <ErrorBox error={progress.error ?? tasks.error} />}
       {tab === 'overview' && pg && tasks.data && <Overview progress={pg} tasks={tasks.data.items} />}
       {tab === 'tasks' && tasks.data && <TasksTab tasks={tasks.data.items} />}
-      {tab === 'team' && isManager && <TeamTab projectId={projectId} />}
+      {tab === 'team' && isManager && <TeamTab projectId={projectId} highlight={params.get('person')} />}
       {tab === 'team' && !isManager && <Empty>Only managers can see the team’s workload.</Empty>}
       {(progress.isLoading || tasks.isLoading) && <Loading />}
 

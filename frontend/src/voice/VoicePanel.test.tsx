@@ -170,4 +170,27 @@ describe('voice panel', () => {
     expect(within(panel).getByRole('alert')).toHaveTextContent('No microphone is available')
     expect(within(panel).queryByText('Listening')).not.toBeInTheDocument()
   })
+
+  it('hands-free is on by default, can be switched off, and the choice is remembered', async () => {
+    localStorage.removeItem('vf.handsFree')
+    mockApi(routes(() => turn({})))
+    const user = userEvent.setup()
+    const { unmount } = render(<App />)
+    await screen.findByRole('heading', { name: 'Projects' })
+    const toggle = screen.getByRole('button', { name: 'Hands-free: On' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/Just speak — I’m listening/)).toBeInTheDocument()
+    // No microphone in the test browser: hands-free never fakes "Listening".
+    expect(within(screen.getByRole('region', { name: 'Voice assistant' })).getByRole('status')).toHaveTextContent('Ready')
+
+    await user.click(toggle)
+    expect(screen.getByRole('button', { name: 'Hands-free: Off' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByText(/Press the microphone and speak/)).toBeInTheDocument()
+    expect(localStorage.getItem('vf.handsFree')).toBe('off')
+
+    unmount()
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'Hands-free: Off' })).toBeInTheDocument()
+    localStorage.removeItem('vf.handsFree')
+  })
 })

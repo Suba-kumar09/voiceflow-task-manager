@@ -221,6 +221,17 @@ def _change_intent(t: str, raw: str) -> Intent | None:
             )
 
     # Employee: completion
+    # "mark as complete", "mark it done", "set this as completed" -> the current task
+    if _m(
+        r"(?:mark|set)(?: (?:it|this|that|my task|the task|this task|that task|my work))?(?: as)? (?:done|complete|completed|finished)",
+        body,
+    ):
+        return Intent("task.complete", {"task": "", **({"note": note} if note else {})})
+    # "complete my task", "finish it", "complete website testing"
+    if m := _m(r"(?:complete|finish)(?: (.+))?", body):
+        return Intent(
+            "task.complete", {"task": _task_hint(m.group(1)), **({"note": note} if note else {})}
+        )
     if m := _m(
         r"(?:i(?:'ve| have)? (?:completed|finished)|i(?:'m| am) (?:done|finished) with|i(?:'m| am) done|i finished|"
         r"(?:mark|set) )(.*?)(?: as (?:done|complete|completed))?(?: is (?:done|complete))?",
@@ -373,7 +384,7 @@ def parse(text: str) -> Intent:
 
     # "show the project team", "show tasks", "show the overview" (current project)
     if m := _m(
-        rf"(?:{_NAV} )?(?:the )?(?:project )?(team|people|members|tasks|task|backlog|overview|summary)",
+        rf"(?:{_NAV} )?(?:the )?(?:project )?(team|people|members|tasks|task|backlog|overview|summary)(?: tab| page| list)?",
         t,
     ):
         return Intent("nav.project_tab", {"tab": _TAB_WORDS[m.group(1)]})
@@ -384,6 +395,8 @@ def parse(text: str) -> Intent:
         t,
     ):
         query, tab = m.group(1).strip(), m.group(2)
+        query = re.sub(r"^me ", "", query)  # "show me Arun"
+        query = re.sub(r"(?:'s)? (?:page|profile|work|tasks?)$", "", query)  # "Arun's page"
         if query and query not in {"page", "screen", "it", "that", "this"}:
             slots = {"project": query}
             if tab:
